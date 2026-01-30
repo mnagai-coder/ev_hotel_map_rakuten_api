@@ -3,7 +3,7 @@ const MANIFEST = 'flutter-app-manifest';
 const TEMP = 'flutter-temp-cache';
 const CACHE_NAME = 'flutter-app-cache';
 
-const RESOURCES = {"flutter_bootstrap.js": "09e30c7d58ed4a1962aa92c7e898360e",
+const RESOURCES = {"flutter_bootstrap.js": "6870c089c71d663b2fc991935e39b43b",
 "version.json": "5c01eb13bb84a0a0e93d41ef28c9b731",
 "index.html": "9127136675598f52729c0820f22ca39e",
 "/": "9127136675598f52729c0820f22ca39e",
@@ -23,7 +23,7 @@ const RESOURCES = {"flutter_bootstrap.js": "09e30c7d58ed4a1962aa92c7e898360e",
 "assets/shaders/stretch_effect.frag": "40d68efbbf360632f614c731219e95f0",
 "assets/AssetManifest.bin": "df39f1c970d3eec4236f6f47975b1049",
 "assets/fonts/MaterialIcons-Regular.otf": "5d493db917eb4f16b3454ddff8e8415c",
-"assets/assets/ev_hotels.csv": "e894d0bc7ee0daa858154630b36a32df",
+"assets/assets/ev_hotels.csv": "4af9e6e0c890390b6d906fdb20d44820",
 "canvaskit/skwasm.js": "8060d46e9a4901ca9991edd3a26be4f0",
 "canvaskit/skwasm_heavy.js": "740d43a6b8240ef9e23eed8c48840da4",
 "canvaskit/skwasm.js.symbols": "3a4aadf4e8141f284bd524976b1d6bdc",
