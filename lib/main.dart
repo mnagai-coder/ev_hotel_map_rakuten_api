@@ -61,7 +61,7 @@ class _MapScreenState extends State<MapScreen> {
   Marker? _userMarker;
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "Rakuten API Mode";
+  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "v13.0 Final Fix";
   BitmapDescriptor? _iconTesla; BitmapDescriptor? _iconRapid; BitmapDescriptor? _iconNormal; BitmapDescriptor? _iconOther; BitmapDescriptor? _iconMyLocation;
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
@@ -105,7 +105,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
-    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
+    // ID未設定なら即終了（これが原因で「検索中」が出ない場合があるため、必ずIDを設定してください）
+    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') {
+      await Future.delayed(const Duration(milliseconds: 500)); // 一瞬待つ演出
+      return null;
+    }
     final url = Uri.parse('https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(hotelName)}&applicationId=$rakutenAppId');
     try {
       final proxyUrl = Uri.parse('https://corsproxy.io/?' + Uri.encodeComponent(url.toString()));
@@ -193,15 +197,26 @@ class _MapScreenState extends State<MapScreen> {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
       return Dialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), insetPadding: const EdgeInsets.all(16), child: PointerInterceptor(child: FutureBuilder<RakutenData?>(future: rakutenFuture, builder: (context, snapshot) {
         String displayImage = hotel.csvImageUrl; String displayPrice = hotel.csvPrice; String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; String? review; bool isRakuten = false;
+        
+        // 楽天データ取得後の上書き処理
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { final r = snapshot.data!; if (r.imageUrl != null) displayImage = r.imageUrl!; if (r.minPrice != null) displayPrice = "${r.minPrice}円〜"; if (r.hotelUrl != null) displayUrl = r.hotelUrl!; review = r.reviewAverage; isRakuten = true; }
+        
+        // ボタン文言の決定（楽天データがあるか、またはCSVにアフィリエイトURLがある場合）
+        String buttonText = "関連サイトを見る";
+        if (isRakuten || hotel.csvAffiliateUrl.isNotEmpty) {
+           buttonText = "楽天トラベルで空室確認";
+        }
+
         String proxyImageUrl(String url) => (url.isEmpty || !url.startsWith('http')) ? "" : "https://wsrv.nl/?url=${Uri.encodeComponent(url)}&w=600&output=webp";
         Widget infoRow(String label, String value, {bool isLink = false, VoidCallback? onTap}) { if (value.isEmpty || value == "nan") return const SizedBox.shrink(); return Padding(padding: const EdgeInsets.only(bottom: 8.0), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))), Expanded(child: GestureDetector(onTap: isLink ? onTap : null, child: Text(value, style: TextStyle(fontSize: 14, color: isLink ? Colors.blue : Colors.black87, decoration: isLink ? TextDecoration.underline : null))))])); }
         Widget sectionTitle(String title) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 8), child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)));
+        
         return Column(mainAxisSize: MainAxisSize.min, children: [
           Stack(alignment: Alignment.topRight, children: [
-            ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(20)), child: displayImage.isNotEmpty ? CachedNetworkImage(imageUrl: proxyImageUrl(displayImage), height: 200, width: double.infinity, fit: BoxFit.cover, placeholder: (context, url) => Container(height: 200, color: Colors.grey[200], child: const Center(child: CircularProgressIndicator())), errorWidget: (context, url, error) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey))) : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50))),
+            ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(20)), child: displayImage.isNotEmpty ? CachedNetworkImage(imageUrl: proxyImageUrl(displayImage), height: 200, width: double.infinity, fit: BoxFit.cover, placeholder: (context, url) => Container(height: 200, color: Colors.grey[200]), errorWidget: (context, url, error) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey))) : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50))),
             Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
-            if (snapshot.connectionState == ConnectionState.waiting) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)), child: const Text("楽天トラベル検索中...", style: TextStyle(color: Colors.white, fontSize: 10)))),
+            // ★検索中表示（画面中央に出す）
+            if (snapshot.connectionState == ConnectionState.waiting) Positioned.fill(child: Container(color: Colors.black26, child: const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(color: Colors.white), SizedBox(height: 8), Text("楽天トラベル検索中...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))])))),
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
           Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -210,12 +225,19 @@ class _MapScreenState extends State<MapScreen> {
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
             SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("Googleマップでルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { final Uri url = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}"); if (await canLaunchUrl(url)) { await launchUrl(url, mode: LaunchMode.externalApplication); } })),
             const SizedBox(height: 16),
+            // ★1. 公式サイトリンク復活
+            if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), Text(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
+
             if (displayPrice.isNotEmpty && displayPrice != "nan") Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: Text("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold))),
-            const Divider(height: 30), sectionTitle("⚡ EV充電スペック"), infoRow("タイプ", hotel.evType), infoRow("出力", hotel.output), infoRow("台数", hotel.chargerCount), infoRow("種別", hotel.category),
-            sectionTitle("🅿️ 利用・料金"), infoRow("充電課金", hotel.chargingFee), infoRow("駐車料金", hotel.parkingFee), infoRow("事前予約", hotel.reservation),
+            const Divider(height: 30), 
+            // ★2. スペック情報復活
+            sectionTitle("⚡ EV充電スペック"), infoRow("タイプ", hotel.evType), infoRow("出力", hotel.output), infoRow("台数", hotel.chargerCount), infoRow("種別", hotel.category), infoRow("最大電流", hotel.maxCurrent), infoRow("メーカー", hotel.manufacturer),
+            // ★3. 連絡・申込復活
+            sectionTitle("🅿️ 利用・料金"), infoRow("充電課金", hotel.chargingFee), infoRow("駐車料金", hotel.parkingFee), infoRow("連絡・申込", hotel.contact), infoRow("事前予約", hotel.reservation),
             if (hotel.notes.isNotEmpty && hotel.notes != "nan") ...[sectionTitle("📝 備考"), Container(width: double.infinity, padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Text(hotel.notes, style: const TextStyle(fontSize: 13, height: 1.4)))],
           ]))),
-          if (displayUrl.isNotEmpty && displayUrl != "nan") Padding(padding: const EdgeInsets.all(16.0), child: SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white, elevation: 5, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), onPressed: () async { final Uri url = Uri.parse(displayUrl); if (await canLaunchUrl(url)) { await launchUrl(url); } }, child: Text(isRakuten ? "楽天トラベルで空室確認" : "関連サイトを見る", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))))),
+          // ★4. ボタン文言修正
+          if (displayUrl.isNotEmpty && displayUrl != "nan") Padding(padding: const EdgeInsets.all(16.0), child: SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white, elevation: 5, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), onPressed: () async { final Uri url = Uri.parse(displayUrl); if (await canLaunchUrl(url)) { await launchUrl(url); } }, child: Text(buttonText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))))),
         ]);
       })));
     });
