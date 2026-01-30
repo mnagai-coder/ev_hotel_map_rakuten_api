@@ -30,6 +30,7 @@ class Hotel {
   Hotel({required this.name, required this.address, required this.lat, required this.lng, required this.evType, required this.chargerCount, required this.output, required this.maxCurrent, required this.category, required this.chargingFee, required this.parkingFee, required this.contact, required this.reservation, required this.manufacturer, required this.auth, required this.notes, required this.csvPrice, required this.csvImageUrl, required this.csvAffiliateUrl, required this.csvSiteUrl});
 }
 
+// 楽天データ
 class RakutenData {
   final String? imageUrl; final String? hotelUrl; final int? minPrice; final String? reviewAverage;
   RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage});
@@ -103,18 +104,15 @@ class _MapScreenState extends State<MapScreen> {
     return _iconOther ?? BitmapDescriptor.defaultMarker;
   }
 
-  // ★修正: 検索ロジックを「お掃除」方式に変更
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
     if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
 
-    // 1. まずはそのままの名前で検索
+    // 1. そのまま検索
     var result = await _searchApi(hotelName);
     if (result != null) return result;
 
-    // 2. 名前をきれいに掃除して検索
-    // "The Okura Tokyo （地下P）" -> "The Okura Tokyo"
+    // 2. お掃除して検索
     String cleanedName = _cleanHotelName(hotelName);
-    
     if (cleanedName != hotelName && cleanedName.length > 2) {
       result = await _searchApi(cleanedName);
       if (result != null) return result;
@@ -122,15 +120,11 @@ class _MapScreenState extends State<MapScreen> {
     return null;
   }
 
-  // ★名前お掃除関数
   String _cleanHotelName(String rawName) {
     String name = rawName;
-    // カッコとその中身を削除
     name = name.replaceAll(RegExp(r'[\(（].*?[\)）]'), '');
-    // スラッシュ以降を削除
     if (name.contains('/')) name = name.split('/')[0];
     if (name.contains('／')) name = name.split('／')[0];
-    // 前後の空白削除
     return name.trim();
   }
 
@@ -242,7 +236,14 @@ class _MapScreenState extends State<MapScreen> {
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
           if (r.imageUrl != null) displayImage = r.imageUrl!; 
-          if (r.minPrice != null) displayPrice = "${r.minPrice}円〜"; 
+          
+          // ★修正：カンマ区切りと税込表記
+          if (r.minPrice != null) {
+            final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+            final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
+            displayPrice = "${formattedPrice}円(税込)〜"; 
+          }
+          
           if (r.hotelUrl != null) displayUrl = r.hotelUrl!; 
           review = r.reviewAverage; 
           isRakuten = (r.minPrice != null); 
