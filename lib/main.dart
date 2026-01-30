@@ -22,7 +22,6 @@ void main() {
   runApp(const EvHotelApp());
 }
 
-// データモデル
 class Hotel {
   final String name; final String address; final double lat; final double lng; final String evType; final String chargerCount; final String output; final String maxCurrent; final String category; final String chargingFee; final String parkingFee; final String contact; final String reservation; final String manufacturer; final String auth; final String notes;
   final String csvPrice; final String csvImageUrl; final String csvAffiliateUrl; final String csvSiteUrl;
@@ -30,7 +29,6 @@ class Hotel {
   Hotel({required this.name, required this.address, required this.lat, required this.lng, required this.evType, required this.chargerCount, required this.output, required this.maxCurrent, required this.category, required this.chargingFee, required this.parkingFee, required this.contact, required this.reservation, required this.manufacturer, required this.auth, required this.notes, required this.csvPrice, required this.csvImageUrl, required this.csvAffiliateUrl, required this.csvSiteUrl});
 }
 
-// 楽天データ
 class RakutenData {
   final String? imageUrl; final String? hotelUrl; final int? minPrice; final String? reviewAverage;
   RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage});
@@ -63,6 +61,9 @@ class _MapScreenState extends State<MapScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "";
   BitmapDescriptor? _iconTesla; BitmapDescriptor? _iconRapid; BitmapDescriptor? _iconNormal; BitmapDescriptor? _iconOther; BitmapDescriptor? _iconMyLocation;
+
+  // ★新機能: データのキャッシュ（一度読み込んだらここに保存）
+  final Map<String, RakutenData?> _rakutenCache = {};
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
 
@@ -104,20 +105,32 @@ class _MapScreenState extends State<MapScreen> {
     return _iconOther ?? BitmapDescriptor.defaultMarker;
   }
 
+  // ★修正: キャッシュ対応のデータ取得
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
+    // 1. まずキャッシュ（メモリ）にあるか確認
+    if (_rakutenCache.containsKey(hotelName)) {
+      return _rakutenCache[hotelName];
+    }
+
     if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
 
-    // 1. そのまま検索
-    var result = await _searchApi(hotelName);
-    if (result != null) return result;
+    RakutenData? result;
 
-    // 2. お掃除して検索
-    String cleanedName = _cleanHotelName(hotelName);
-    if (cleanedName != hotelName && cleanedName.length > 2) {
-      result = await _searchApi(cleanedName);
-      if (result != null) return result;
+    // 2. そのまま検索
+    result = await _searchApi(hotelName);
+    
+    // 3. なければお掃除して検索
+    if (result == null) {
+      String cleanedName = _cleanHotelName(hotelName);
+      if (cleanedName != hotelName && cleanedName.length > 2) {
+        result = await _searchApi(cleanedName);
+      }
     }
-    return null;
+
+    // 4. 結果をキャッシュに保存（nullでも保存して、次回無駄な通信をしない）
+    _rakutenCache[hotelName] = result;
+    
+    return result;
   }
 
   String _cleanHotelName(String rawName) {
@@ -236,14 +249,11 @@ class _MapScreenState extends State<MapScreen> {
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
           if (r.imageUrl != null) displayImage = r.imageUrl!; 
-          
-          // ★修正：カンマ区切りと税込表記
           if (r.minPrice != null) {
             final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
             final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
             displayPrice = "${formattedPrice}円(税込)〜"; 
           }
-          
           if (r.hotelUrl != null) displayUrl = r.hotelUrl!; 
           review = r.reviewAverage; 
           isRakuten = (r.minPrice != null); 
