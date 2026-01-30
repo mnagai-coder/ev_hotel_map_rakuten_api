@@ -62,7 +62,7 @@ class _MapScreenState extends State<MapScreen> {
   bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "";
   BitmapDescriptor? _iconTesla; BitmapDescriptor? _iconRapid; BitmapDescriptor? _iconNormal; BitmapDescriptor? _iconOther; BitmapDescriptor? _iconMyLocation;
 
-  // ★新機能: データのキャッシュ（一度読み込んだらここに保存）
+  // キャッシュ
   final Map<String, RakutenData?> _rakutenCache = {};
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
@@ -105,31 +105,20 @@ class _MapScreenState extends State<MapScreen> {
     return _iconOther ?? BitmapDescriptor.defaultMarker;
   }
 
-  // ★修正: キャッシュ対応のデータ取得
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
-    // 1. まずキャッシュ（メモリ）にあるか確認
-    if (_rakutenCache.containsKey(hotelName)) {
-      return _rakutenCache[hotelName];
-    }
-
-    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
+    if (_rakutenCache.containsKey(hotelName)) return _rakutenCache[hotelName];
+    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null; // ID未設定なら何もしない
 
     RakutenData? result;
-
-    // 2. そのまま検索
-    result = await _searchApi(hotelName);
+    result = await _searchApiWithFallback(hotelName);
     
-    // 3. なければお掃除して検索
     if (result == null) {
       String cleanedName = _cleanHotelName(hotelName);
       if (cleanedName != hotelName && cleanedName.length > 2) {
-        result = await _searchApi(cleanedName);
+        result = await _searchApiWithFallback(cleanedName);
       }
     }
-
-    // 4. 結果をキャッシュに保存（nullでも保存して、次回無駄な通信をしない）
     _rakutenCache[hotelName] = result;
-    
     return result;
   }
 
@@ -141,12 +130,24 @@ class _MapScreenState extends State<MapScreen> {
     return name.trim();
   }
 
-  Future<RakutenData?> _searchApi(String keyword) async {
-    final url = Uri.parse('https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId');
+  // ★新機能：ダブル・プロキシシステム（これが鉄壁の理由！）
+  Future<RakutenData?> _searchApiWithFallback(String keyword) async {
+    final targetUrl = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId';
+    
+    // 1. メイン回線 (allorigins)
+    var data = await _tryFetch('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(targetUrl));
+    if (data != null) return data;
+
+    // 2. 予備回線 (corsproxy) - メインがダメならこっちを使う
+    data = await _tryFetch('https://corsproxy.io/?' + Uri.encodeComponent(targetUrl));
+    if (data != null) return data;
+
+    return null;
+  }
+
+  Future<RakutenData?> _tryFetch(String proxyUrl) async {
     try {
-      final proxyUrl = Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(url.toString()));
-      final response = await http.get(proxyUrl);
-      
+      final response = await http.get(Uri.parse(proxyUrl)).timeout(const Duration(seconds: 5)); // 5秒で諦める
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['hotels'] != null && data['hotels'].isNotEmpty) {
@@ -160,7 +161,7 @@ class _MapScreenState extends State<MapScreen> {
         }
       }
     } catch (e) {
-      debugPrint("API Error: $e");
+      // エラーなら何もしない（次を試す）
     }
     return null;
   }
@@ -170,12 +171,15 @@ class _MapScreenState extends State<MapScreen> {
     if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください'))); return; }
     setState(() { _statusMessage = "検索中..."; });
     
-    final url = Uri.parse('https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$query&inputtype=textquery&fields=geometry&key=$googleMapsApiKey');
+    final targetUrl = 'https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$query&inputtype=textquery&fields=geometry&key=$googleMapsApiKey';
     
     try {
-      final proxyUrl = Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(url.toString()));
-      final response = await http.get(proxyUrl);
-      
+      // 検索もダブル構成に変更
+      var response = await http.get(Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(targetUrl)));
+      if (response.statusCode != 200) {
+         response = await http.get(Uri.parse('https://corsproxy.io/?' + Uri.encodeComponent(targetUrl)));
+      }
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['candidates'] != null && data['candidates'].isNotEmpty) {
