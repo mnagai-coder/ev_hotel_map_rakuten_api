@@ -1,0 +1,29 @@
+name: ev_hotel_map_rakuten_api
+description: EV Hotel Map with Rakuten API
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_maps_flutter: ^2.5.0
+  csv: ^6.0.0
+  url_launcher: ^6.2.0
+  cached_network_image: ^3.3.0
+  cupertino_icons: ^1.0.2
+  pointer_interceptor: ^0.10.1+2
+  geolocator: ^14.0.2
+  http: ^1.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/ev_hotels.csv
