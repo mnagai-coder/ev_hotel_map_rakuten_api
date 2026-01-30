@@ -30,7 +30,6 @@ class Hotel {
   Hotel({required this.name, required this.address, required this.lat, required this.lng, required this.evType, required this.chargerCount, required this.output, required this.maxCurrent, required this.category, required this.chargingFee, required this.parkingFee, required this.contact, required this.reservation, required this.manufacturer, required this.auth, required this.notes, required this.csvPrice, required this.csvImageUrl, required this.csvAffiliateUrl, required this.csvSiteUrl});
 }
 
-// 楽天データ
 class RakutenData {
   final String? imageUrl; final String? hotelUrl; final int? minPrice; final String? reviewAverage;
   RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage});
@@ -61,7 +60,7 @@ class _MapScreenState extends State<MapScreen> {
   Marker? _userMarker;
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = ""; // メッセージも空にしてスッキリさせる
+  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "";
   BitmapDescriptor? _iconTesla; BitmapDescriptor? _iconRapid; BitmapDescriptor? _iconNormal; BitmapDescriptor? _iconOther; BitmapDescriptor? _iconMyLocation;
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
@@ -104,22 +103,35 @@ class _MapScreenState extends State<MapScreen> {
     return _iconOther ?? BitmapDescriptor.defaultMarker;
   }
 
+  // ★修正: 検索ロジックを「お掃除」方式に変更
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
     if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
 
-    // 1. そのまま検索
+    // 1. まずはそのままの名前で検索
     var result = await _searchApi(hotelName);
     if (result != null) return result;
 
-    // 2. スペースで区切って「最初の単語」だけで検索
-    if (hotelName.contains(' ') || hotelName.contains('　')) {
-      final splitName = hotelName.replaceAll('　', ' ').split(' ')[0];
-      if (splitName.length > 2) { 
-        result = await _searchApi(splitName);
-        if (result != null) return result;
-      }
+    // 2. 名前をきれいに掃除して検索
+    // "The Okura Tokyo （地下P）" -> "The Okura Tokyo"
+    String cleanedName = _cleanHotelName(hotelName);
+    
+    if (cleanedName != hotelName && cleanedName.length > 2) {
+      result = await _searchApi(cleanedName);
+      if (result != null) return result;
     }
     return null;
+  }
+
+  // ★名前お掃除関数
+  String _cleanHotelName(String rawName) {
+    String name = rawName;
+    // カッコとその中身を削除
+    name = name.replaceAll(RegExp(r'[\(（].*?[\)）]'), '');
+    // スラッシュ以降を削除
+    if (name.contains('/')) name = name.split('/')[0];
+    if (name.contains('／')) name = name.split('／')[0];
+    // 前後の空白削除
+    return name.trim();
   }
 
   Future<RakutenData?> _searchApi(String keyword) async {
@@ -163,7 +175,7 @@ class _MapScreenState extends State<MapScreen> {
           final location = data['candidates'][0]['geometry']['location'];
           final GoogleMapController controller = await _controller.future;
           controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(location['lat'], location['lng']), zoom: 14.0)));
-          setState(() { _statusMessage = ""; }); // 完了したら消す
+          setState(() { _statusMessage = ""; });
         } else { _zoomToFitResults(); }
       }
     } catch (e) { debugPrint("Search Error: $e"); }
