@@ -33,7 +33,8 @@ class Hotel {
 // 楽天データ
 class RakutenData {
   final String? imageUrl; final String? hotelUrl; final int? minPrice; final String? reviewAverage;
-  RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage});
+  final String debugMessage; // デバッグ用
+  RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage, required this.debugMessage});
 }
 
 class EvHotelApp extends StatelessWidget {
@@ -61,7 +62,7 @@ class _MapScreenState extends State<MapScreen> {
   Marker? _userMarker;
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "v14.0 API Only Mode";
+  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "v15.0 Keyword Search";
   BitmapDescriptor? _iconTesla; BitmapDescriptor? _iconRapid; BitmapDescriptor? _iconNormal; BitmapDescriptor? _iconOther; BitmapDescriptor? _iconMyLocation;
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
@@ -77,9 +78,9 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _generateCustomIcons() async {
     _iconTesla = await _createMarkerBitmap(Colors.redAccent);
     _iconRapid = await _createMarkerBitmap(Colors.orange);
-    _iconNormal = await _createMarkerBitmap(Colors.yellow);
+    _iconNormal = await _createMarkerBitmap(Colors.yellow); // 普通＝黄色
     _iconOther = await _createMarkerBitmap(Colors.purple);
-    _iconMyLocation = await _createMarkerBitmap(Colors.blueAccent);
+    _iconMyLocation = await _createMarkerBitmap(Colors.blueAccent); // 自分＝青
     setState(() {}); 
   }
 
@@ -106,22 +107,50 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
     if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') {
-      await Future.delayed(const Duration(milliseconds: 500)); 
-      return null;
+      return RakutenData(debugMessage: "【エラー】ソースコードの YOUR_RAKUTEN_APP_ID を書き換えてください。");
     }
-    // ホテル名で検索
-    final url = Uri.parse('https://app.rakuten.co.jp/services/api/Travel/SimpleHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(hotelName)}&applicationId=$rakutenAppId');
+
+    // 1. まずはそのままの名前で検索
+    var result = await _searchApi(hotelName);
+    if (result != null) return result;
+
+    // 2. ヒットしなければ、スペースで区切って「最初の単語」だけで検索
+    if (hotelName.contains(' ') || hotelName.contains('　')) {
+      final splitName = hotelName.replaceAll('　', ' ').split(' ')[0];
+      if (splitName.length > 2) { 
+        result = await _searchApi(splitName);
+        if (result != null) return result;
+      }
+    }
+
+    return RakutenData(debugMessage: "検索名: $hotelName\n結果: 0件 (ヒットなし)");
+  }
+
+  // ★修正: SimpleHotelSearch -> KeywordHotelSearch に変更！
+  Future<RakutenData?> _searchApi(String keyword) async {
+    final url = Uri.parse('https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId');
     try {
       final proxyUrl = Uri.parse('https://corsproxy.io/?' + Uri.encodeComponent(url.toString()));
       final response = await http.get(proxyUrl);
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['hotels'] != null && data['hotels'].isNotEmpty) {
           final basicInfo = data['hotels'][0]['hotel'][0]['hotelBasicInfo'];
-          return RakutenData(imageUrl: basicInfo['hotelImageUrl'], hotelUrl: basicInfo['hotelInformationUrl'], minPrice: basicInfo['hotelMinCharge'], reviewAverage: basicInfo['reviewAverage']?.toString());
+          return RakutenData(
+            imageUrl: basicInfo['hotelImageUrl'],
+            hotelUrl: basicInfo['hotelInformationUrl'],
+            minPrice: basicInfo['hotelMinCharge'],
+            reviewAverage: basicInfo['reviewAverage']?.toString(),
+            debugMessage: "取得成功: ${basicInfo['hotelName']}"
+          );
         }
+      } else {
+        return RakutenData(debugMessage: "APIエラー: ${response.statusCode}\n${response.body}");
       }
-    } catch (e) { debugPrint("Rakuten API Error: $e"); }
+    } catch (e) {
+      return RakutenData(debugMessage: "例外発生: $e");
+    }
     return null;
   }
 
@@ -197,15 +226,17 @@ class _MapScreenState extends State<MapScreen> {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
       return Dialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), insetPadding: const EdgeInsets.all(16), child: PointerInterceptor(child: FutureBuilder<RakutenData?>(future: rakutenFuture, builder: (context, snapshot) {
         
-        // ★修正3: 初期値は空（CSVデータは使わない）
-        String displayImage = ""; 
-        String displayPrice = ""; 
-        String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; 
-        String? review; 
-        bool isRakuten = false;
+        String displayImage = ""; String displayPrice = ""; String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; String? review; bool isRakuten = false; String debugMsg = "";
         
-        // API取得成功時のみデータを入れる
-        if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { final r = snapshot.data!; if (r.imageUrl != null) displayImage = r.imageUrl!; if (r.minPrice != null) displayPrice = "${r.minPrice}円〜"; if (r.hotelUrl != null) displayUrl = r.hotelUrl!; review = r.reviewAverage; isRakuten = true; }
+        if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
+          final r = snapshot.data!; 
+          debugMsg = r.debugMessage; // デバッグ情報
+          if (r.imageUrl != null) displayImage = r.imageUrl!; 
+          if (r.minPrice != null) displayPrice = "${r.minPrice}円〜"; 
+          if (r.hotelUrl != null) displayUrl = r.hotelUrl!; 
+          review = r.reviewAverage; 
+          isRakuten = (r.minPrice != null); 
+        }
         
         String buttonText = "関連サイトを見る";
         if (isRakuten || hotel.csvAffiliateUrl.isNotEmpty) { buttonText = "楽天トラベルで空室確認"; }
@@ -216,23 +247,23 @@ class _MapScreenState extends State<MapScreen> {
         
         return Column(mainAxisSize: MainAxisSize.min, children: [
           Stack(alignment: Alignment.topRight, children: [
-            // 画像表示部
             ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(20)), child: displayImage.isNotEmpty ? CachedNetworkImage(imageUrl: proxyImageUrl(displayImage), height: 200, width: double.infinity, fit: BoxFit.cover, placeholder: (context, url) => Container(height: 200, color: Colors.grey[200]), errorWidget: (context, url, error) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey))) : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50))),
             Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
-            // ★修正1: グルグル表示（検索中）を削除しました
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
           Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // ★デバッグ情報を表示（API動作確認用）
+            if (debugMsg.isNotEmpty) Text(debugMsg, style: const TextStyle(fontSize: 10, color: Colors.red)),
+            
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
             SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("Googleマップでルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { final Uri url = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}"); if (await canLaunchUrl(url)) { await launchUrl(url, mode: LaunchMode.externalApplication); } })),
             const SizedBox(height: 16),
 
-            // ★修正3: 価格（APIから取得できた場合のみ表示）
             if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: Text("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
-
-            // ★修正2: リンク位置を価格の下へ移動
+            
+            // リンク
             if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), Text(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
 
             const Divider(height: 10), 
@@ -246,7 +277,6 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  // ★修正4: フィルタ順序変更
   Widget _buildFilterChip(String label) {
     final isSelected = _selectedFilter == label;
     return Padding(padding: const EdgeInsets.only(right: 8.0), child: FilterChip(label: Text(label), selected: isSelected, onSelected: (bool selected) { setState(() { _selectedFilter = isSelected ? 'すべて' : label; _applyFilter(); }); }, backgroundColor: Colors.white, selectedColor: Colors.blue[100], checkmarkColor: Colors.blue[800], labelStyle: TextStyle(color: isSelected ? Colors.blue[900] : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? Colors.blue : Colors.grey.shade300))));
@@ -259,7 +289,6 @@ class _MapScreenState extends State<MapScreen> {
         GoogleMap(mapType: MapType.normal, initialCameraPosition: _kTokyoStation, markers: _hotelMarkers.union(_userMarker != null ? {_userMarker!} : {}), myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onMapCreated: (GoogleMapController controller) { _controller.complete(controller); }),
         SafeArea(child: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 0), child: Card(elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), child: TextField(controller: _searchController, textInputAction: TextInputAction.search, onSubmitted: (value) { _handleSearchSubmit(value); }, decoration: const InputDecoration(hintText: "場所（新宿駅）、ホテル名、充電タイプ", prefixIcon: Icon(Icons.search), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15)), onChanged: _onSearchChanged))),
-          // 順序入れ替え: すべて, 急速, 普通, 6kW, テスラ
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),
           if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
         ])),
