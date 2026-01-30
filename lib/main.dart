@@ -33,8 +33,7 @@ class Hotel {
 // 楽天データ
 class RakutenData {
   final String? imageUrl; final String? hotelUrl; final int? minPrice; final String? reviewAverage;
-  final String debugMessage; 
-  RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage, required this.debugMessage});
+  RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage});
 }
 
 class EvHotelApp extends StatelessWidget {
@@ -62,7 +61,7 @@ class _MapScreenState extends State<MapScreen> {
   Marker? _userMarker;
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "v16.0 New Proxy";
+  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = ""; // メッセージも空にしてスッキリさせる
   BitmapDescriptor? _iconTesla; BitmapDescriptor? _iconRapid; BitmapDescriptor? _iconNormal; BitmapDescriptor? _iconOther; BitmapDescriptor? _iconMyLocation;
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
@@ -106,9 +105,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
-    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') {
-      return RakutenData(debugMessage: "【エラー】ソースコードの YOUR_RAKUTEN_APP_ID を書き換えてください。");
-    }
+    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
 
     // 1. そのまま検索
     var result = await _searchApi(hotelName);
@@ -122,14 +119,12 @@ class _MapScreenState extends State<MapScreen> {
         if (result != null) return result;
       }
     }
-
-    return RakutenData(debugMessage: "検索名: $hotelName\n結果: 0件 (ヒットなし)");
+    return null;
   }
 
   Future<RakutenData?> _searchApi(String keyword) async {
     final url = Uri.parse('https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId');
     try {
-      // ★修正ポイント：プロキシを allorigins.win に変更
       final proxyUrl = Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(url.toString()));
       final response = await http.get(proxyUrl);
       
@@ -142,14 +137,11 @@ class _MapScreenState extends State<MapScreen> {
             hotelUrl: basicInfo['hotelInformationUrl'],
             minPrice: basicInfo['hotelMinCharge'],
             reviewAverage: basicInfo['reviewAverage']?.toString(),
-            debugMessage: "取得成功: ${basicInfo['hotelName']}"
           );
         }
-      } else {
-        return RakutenData(debugMessage: "APIエラー: ${response.statusCode}");
       }
     } catch (e) {
-      return RakutenData(debugMessage: "例外発生: $e");
+      debugPrint("API Error: $e");
     }
     return null;
   }
@@ -162,7 +154,6 @@ class _MapScreenState extends State<MapScreen> {
     final url = Uri.parse('https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$query&inputtype=textquery&fields=geometry&key=$googleMapsApiKey');
     
     try {
-      // ★修正ポイント：こちらもプロキシ変更
       final proxyUrl = Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(url.toString()));
       final response = await http.get(proxyUrl);
       
@@ -172,7 +163,7 @@ class _MapScreenState extends State<MapScreen> {
           final location = data['candidates'][0]['geometry']['location'];
           final GoogleMapController controller = await _controller.future;
           controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(location['lat'], location['lng']), zoom: 14.0)));
-          setState(() { _statusMessage = "移動しました"; });
+          setState(() { _statusMessage = ""; }); // 完了したら消す
         } else { _zoomToFitResults(); }
       }
     } catch (e) { debugPrint("Search Error: $e"); }
@@ -180,7 +171,7 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _determinePosition({bool silent = false}) async {
     if (!mounted && !silent) return;
-    setState(() { _statusMessage = "現在地を取得中..."; });
+    if (!silent) setState(() { _statusMessage = "現在地を取得中..."; });
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) return;
@@ -188,7 +179,10 @@ class _MapScreenState extends State<MapScreen> {
       if (permission == LocationPermission.denied) { permission = await Geolocator.requestPermission(); if (permission == LocationPermission.denied) return; }
       if (permission == LocationPermission.deniedForever) return;
       Position position = await Geolocator.getCurrentPosition();
-      setState(() { _userMarker = Marker(markerId: const MarkerId("my_location"), position: LatLng(position.latitude, position.longitude), icon: _iconMyLocation ?? BitmapDescriptor.defaultMarker, infoWindow: const InfoWindow(title: "現在地"), zIndex: 1000); _statusMessage = "現在地を表示"; });
+      setState(() { 
+        _userMarker = Marker(markerId: const MarkerId("my_location"), position: LatLng(position.latitude, position.longitude), icon: _iconMyLocation ?? BitmapDescriptor.defaultMarker, infoWindow: const InfoWindow(title: "現在地"), zIndex: 1000); 
+        _statusMessage = "";
+      });
       final GoogleMapController controller = await _controller.future;
       controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(position.latitude, position.longitude), zoom: 14.0)));
     } catch (e) { debugPrint("Location Error: $e"); }
@@ -231,11 +225,10 @@ class _MapScreenState extends State<MapScreen> {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
       return Dialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), insetPadding: const EdgeInsets.all(16), child: PointerInterceptor(child: FutureBuilder<RakutenData?>(future: rakutenFuture, builder: (context, snapshot) {
         
-        String displayImage = ""; String displayPrice = ""; String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; String? review; bool isRakuten = false; String debugMsg = "";
+        String displayImage = ""; String displayPrice = ""; String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; String? review; bool isRakuten = false;
         
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
-          debugMsg = r.debugMessage; 
           if (r.imageUrl != null) displayImage = r.imageUrl!; 
           if (r.minPrice != null) displayPrice = "${r.minPrice}円〜"; 
           if (r.hotelUrl != null) displayUrl = r.hotelUrl!; 
@@ -257,7 +250,6 @@ class _MapScreenState extends State<MapScreen> {
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
           Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (debugMsg.isNotEmpty) Text(debugMsg, style: const TextStyle(fontSize: 10, color: Colors.red)),
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
@@ -291,7 +283,7 @@ class _MapScreenState extends State<MapScreen> {
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),
           if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
         ])),
-        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
+        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
       ]),
     );
   }
