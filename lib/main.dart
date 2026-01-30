@@ -33,7 +33,7 @@ class Hotel {
 // 楽天データ
 class RakutenData {
   final String? imageUrl; final String? hotelUrl; final int? minPrice; final String? reviewAverage;
-  final String debugMessage; // デバッグ用
+  final String debugMessage; 
   RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage, required this.debugMessage});
 }
 
@@ -62,7 +62,7 @@ class _MapScreenState extends State<MapScreen> {
   Marker? _userMarker;
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
-  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "v15.0 Keyword Search";
+  bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "v16.0 New Proxy";
   BitmapDescriptor? _iconTesla; BitmapDescriptor? _iconRapid; BitmapDescriptor? _iconNormal; BitmapDescriptor? _iconOther; BitmapDescriptor? _iconMyLocation;
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
@@ -78,9 +78,9 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _generateCustomIcons() async {
     _iconTesla = await _createMarkerBitmap(Colors.redAccent);
     _iconRapid = await _createMarkerBitmap(Colors.orange);
-    _iconNormal = await _createMarkerBitmap(Colors.yellow); // 普通＝黄色
+    _iconNormal = await _createMarkerBitmap(Colors.yellow);
     _iconOther = await _createMarkerBitmap(Colors.purple);
-    _iconMyLocation = await _createMarkerBitmap(Colors.blueAccent); // 自分＝青
+    _iconMyLocation = await _createMarkerBitmap(Colors.blueAccent);
     setState(() {}); 
   }
 
@@ -110,11 +110,11 @@ class _MapScreenState extends State<MapScreen> {
       return RakutenData(debugMessage: "【エラー】ソースコードの YOUR_RAKUTEN_APP_ID を書き換えてください。");
     }
 
-    // 1. まずはそのままの名前で検索
+    // 1. そのまま検索
     var result = await _searchApi(hotelName);
     if (result != null) return result;
 
-    // 2. ヒットしなければ、スペースで区切って「最初の単語」だけで検索
+    // 2. スペースで区切って「最初の単語」だけで検索
     if (hotelName.contains(' ') || hotelName.contains('　')) {
       final splitName = hotelName.replaceAll('　', ' ').split(' ')[0];
       if (splitName.length > 2) { 
@@ -126,11 +126,11 @@ class _MapScreenState extends State<MapScreen> {
     return RakutenData(debugMessage: "検索名: $hotelName\n結果: 0件 (ヒットなし)");
   }
 
-  // ★修正: SimpleHotelSearch -> KeywordHotelSearch に変更！
   Future<RakutenData?> _searchApi(String keyword) async {
     final url = Uri.parse('https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId');
     try {
-      final proxyUrl = Uri.parse('https://corsproxy.io/?' + Uri.encodeComponent(url.toString()));
+      // ★修正ポイント：プロキシを allorigins.win に変更
+      final proxyUrl = Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(url.toString()));
       final response = await http.get(proxyUrl);
       
       if (response.statusCode == 200) {
@@ -146,7 +146,7 @@ class _MapScreenState extends State<MapScreen> {
           );
         }
       } else {
-        return RakutenData(debugMessage: "APIエラー: ${response.statusCode}\n${response.body}");
+        return RakutenData(debugMessage: "APIエラー: ${response.statusCode}");
       }
     } catch (e) {
       return RakutenData(debugMessage: "例外発生: $e");
@@ -158,9 +158,14 @@ class _MapScreenState extends State<MapScreen> {
     if (query.isEmpty) return;
     if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください'))); return; }
     setState(() { _statusMessage = "検索中..."; });
-    final url = Uri.parse('https://corsproxy.io/?' + Uri.encodeComponent('https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$query&inputtype=textquery&fields=geometry&key=$googleMapsApiKey'));
+    
+    final url = Uri.parse('https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$query&inputtype=textquery&fields=geometry&key=$googleMapsApiKey');
+    
     try {
-      final response = await http.get(url);
+      // ★修正ポイント：こちらもプロキシ変更
+      final proxyUrl = Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(url.toString()));
+      final response = await http.get(proxyUrl);
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['candidates'] != null && data['candidates'].isNotEmpty) {
@@ -230,7 +235,7 @@ class _MapScreenState extends State<MapScreen> {
         
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
-          debugMsg = r.debugMessage; // デバッグ情報
+          debugMsg = r.debugMessage; 
           if (r.imageUrl != null) displayImage = r.imageUrl!; 
           if (r.minPrice != null) displayPrice = "${r.minPrice}円〜"; 
           if (r.hotelUrl != null) displayUrl = r.hotelUrl!; 
@@ -252,20 +257,14 @@ class _MapScreenState extends State<MapScreen> {
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
           Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // ★デバッグ情報を表示（API動作確認用）
             if (debugMsg.isNotEmpty) Text(debugMsg, style: const TextStyle(fontSize: 10, color: Colors.red)),
-            
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
             SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("Googleマップでルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { final Uri url = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}"); if (await canLaunchUrl(url)) { await launchUrl(url, mode: LaunchMode.externalApplication); } })),
             const SizedBox(height: 16),
-
             if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: Text("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
-            
-            // リンク
             if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), Text(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
-
             const Divider(height: 10), 
             sectionTitle("⚡ EV充電スペック"), infoRow("タイプ", hotel.evType), infoRow("出力", hotel.output), infoRow("台数", hotel.chargerCount), infoRow("種別", hotel.category), infoRow("最大電流", hotel.maxCurrent), infoRow("メーカー", hotel.manufacturer),
             sectionTitle("🅿️ 利用・料金"), infoRow("充電課金", hotel.chargingFee), infoRow("駐車料金", hotel.parkingFee), infoRow("連絡・申込", hotel.contact), infoRow("事前予約", hotel.reservation),
