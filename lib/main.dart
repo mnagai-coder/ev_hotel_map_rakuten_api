@@ -15,8 +15,13 @@ import 'package:http/http.dart' as http;
 // ★★★ 1. Google Maps APIキー ★★★
 const String googleMapsApiKey = 'AIzaSyDzd-cyeB0xm1DZQkMZkYNQCHZZ3CnHGDU';
 
-// ★★★ 2. 楽天アプリID (Rakuten Application ID) ★★★
+// ★★★ 2. 楽天アプリID ★★★
 const String rakutenAppId = '1075764343336522161'; 
+
+// ★★★ 3. あなたのCloudflare Workers URL ★★★
+// 例: 'https://damp-snow-b9f9.mnagai.workers.dev/'
+// (末尾にスラッシュは入れないでください)
+const String myProxyUrl = 'YOUR_CLOUDFLARE_URL';
 
 void main() {
   runApp(const EvHotelApp());
@@ -106,18 +111,24 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<RakutenData?> _fetchRakutenData(String hotelName) async {
+    // 1. キャッシュ確認（これがあれば0秒表示）
     if (_rakutenCache.containsKey(hotelName)) return _rakutenCache[hotelName];
-    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null; // ID未設定なら何もしない
+    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
 
     RakutenData? result;
-    result = await _searchApiWithFallback(hotelName);
     
+    // 2. 検索実行（専用プロキシ経由）
+    result = await _searchApi(hotelName);
+    
+    // 3. なければお掃除して再検索
     if (result == null) {
       String cleanedName = _cleanHotelName(hotelName);
       if (cleanedName != hotelName && cleanedName.length > 2) {
-        result = await _searchApiWithFallback(cleanedName);
+        result = await _searchApi(cleanedName);
       }
     }
+    
+    // 4. キャッシュに保存
     _rakutenCache[hotelName] = result;
     return result;
   }
@@ -130,24 +141,14 @@ class _MapScreenState extends State<MapScreen> {
     return name.trim();
   }
 
-  // ★新機能：ダブル・プロキシシステム（これが鉄壁の理由！）
-  Future<RakutenData?> _searchApiWithFallback(String keyword) async {
+  // ★修正：専用プロキシを使用する高速検索
+  Future<RakutenData?> _searchApi(String keyword) async {
     final targetUrl = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId';
     
-    // 1. メイン回線 (allorigins)
-    var data = await _tryFetch('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(targetUrl));
-    if (data != null) return data;
-
-    // 2. 予備回線 (corsproxy) - メインがダメならこっちを使う
-    data = await _tryFetch('https://corsproxy.io/?' + Uri.encodeComponent(targetUrl));
-    if (data != null) return data;
-
-    return null;
-  }
-
-  Future<RakutenData?> _tryFetch(String proxyUrl) async {
     try {
-      final response = await http.get(Uri.parse(proxyUrl)).timeout(const Duration(seconds: 5)); // 5秒で諦める
+      // Cloudflare Workers経由でリクエスト
+      final response = await http.get(Uri.parse('$myProxyUrl?url=' + Uri.encodeComponent(targetUrl)));
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['hotels'] != null && data['hotels'].isNotEmpty) {
@@ -161,7 +162,7 @@ class _MapScreenState extends State<MapScreen> {
         }
       }
     } catch (e) {
-      // エラーなら何もしない（次を試す）
+      debugPrint("API Error: $e");
     }
     return null;
   }
@@ -174,12 +175,9 @@ class _MapScreenState extends State<MapScreen> {
     final targetUrl = 'https://maps.googleapis.com/maps/api/place/findplacefromtext/json?input=$query&inputtype=textquery&fields=geometry&key=$googleMapsApiKey';
     
     try {
-      // 検索もダブル構成に変更
-      var response = await http.get(Uri.parse('https://api.allorigins.win/raw?url=' + Uri.encodeComponent(targetUrl)));
-      if (response.statusCode != 200) {
-         response = await http.get(Uri.parse('https://corsproxy.io/?' + Uri.encodeComponent(targetUrl)));
-      }
-
+      // 検索も専用プロキシ経由に変更
+      final response = await http.get(Uri.parse('$myProxyUrl?url=' + Uri.encodeComponent(targetUrl)));
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['candidates'] != null && data['candidates'].isNotEmpty) {
@@ -266,7 +264,13 @@ class _MapScreenState extends State<MapScreen> {
         String buttonText = "関連サイトを見る";
         if (isRakuten || hotel.csvAffiliateUrl.isNotEmpty) { buttonText = "楽天トラベルで空室確認"; }
 
-        String proxyImageUrl(String url) => (url.isEmpty || !url.startsWith('http')) ? "" : "https://wsrv.nl/?url=${Uri.encodeComponent(url)}&w=600&output=webp";
+        // ★修正: プロキシURLを使って画像を表示（画像の取得も高速化）
+        String proxyImageUrl(String url) {
+          if (url.isEmpty || !url.startsWith('http')) return "";
+          // Cloudflare経由で画像を取る（CORS回避＆高速化）
+          return "$myProxyUrl?url=${Uri.encodeComponent(url)}";
+        }
+
         Widget infoRow(String label, String value, {bool isLink = false, VoidCallback? onTap}) { if (value.isEmpty || value == "nan") return const SizedBox.shrink(); return Padding(padding: const EdgeInsets.only(bottom: 8.0), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))), Expanded(child: GestureDetector(onTap: isLink ? onTap : null, child: Text(value, style: TextStyle(fontSize: 14, color: isLink ? Colors.blue : Colors.black87, decoration: isLink ? TextDecoration.underline : null))))])); }
         Widget sectionTitle(String title) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 8), child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)));
         
