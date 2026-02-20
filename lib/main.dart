@@ -12,15 +12,24 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
 // ★★★ 1. Google Maps APIキー ★★★
-const String googleMapsApiKey = 'YOUR_GOOGLE_API_KEY';
+const String googleMapsApiKey = String.fromEnvironment(
+  'GOOGLE_MAPS_API_KEY',
+  defaultValue: 'YOUR_GOOGLE_API_KEY',
+);
 
 // ★★★ 2. 楽天アプリID ★★★
-const String rakutenAppId = 'YOUR_RAKUTEN_APP_ID';
+const String rakutenAppId = String.fromEnvironment(
+  'RAKUTEN_APP_ID',
+  defaultValue: 'YOUR_RAKUTEN_APP_ID',
+);
 
 // ★★★ 3. あなたのCloudflare Workers URL ★★★
 // 例: 'https://damp-snow-b9f9.mnagai.workers.dev/'
 // (末尾にスラッシュは入れないでください)
-const String myProxyUrl = 'YOUR_CLOUDFLARE_URL';
+const String myProxyUrl = String.fromEnvironment(
+  'CLOUDFLARE_PROXY_URL',
+  defaultValue: 'YOUR_CLOUDFLARE_URL',
+);
 
 void main() {
   runApp(const EvHotelApp());
