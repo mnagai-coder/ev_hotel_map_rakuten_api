@@ -1,16 +1,31 @@
-# ev_hotel_map
+# EV Hotel Map (Rakuten API)
 
-A new Flutter project.
+EV充電器付きホテルを地図上で検索・閲覧するFlutterアプリです。  
+CSVデータをベースに、楽天トラベルAPIの補足情報（画像/価格/レビュー）を表示します。
 
-## Getting Started
+## セットアップ
 
-This project is a starting point for a Flutter application.
+1. `lib/main.dart` の以下を設定してください。
+- `googleMapsApiKey`
+- `rakutenAppId`
+- `myProxyUrl`（Cloudflare Workers URL。末尾 `/` なし）
 
-A few resources to get you started if this is your first Flutter project:
+2. Web利用時は `web/index.html` の以下を設定してください。
+- `YOUR_GOOGLE_MAPS_WEB_API_KEY`
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+3. 依存関係を取得して起動します。
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+flutter run
+```
+
+## 公開前チェック
+
+- APIキーやIDをソースに直書きしたまま公開しない
+- `myProxyUrl` 未設定だと外部API連携は動作しない
+- GitHub Pagesで公開する場合は `flutter build web --output docs` で成果物を作成できる
+
+## 要件定義
+
+- `REQUIREMENTS.md`（必要に応じて作成）

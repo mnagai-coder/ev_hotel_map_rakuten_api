@@ -13,10 +13,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
 // ★★★ 1. Google Maps APIキー ★★★
-const String googleMapsApiKey = 'AIzaSyDzd-cyeB0xm1DZQkMZkYNQCHZZ3CnHGDU';
+const String googleMapsApiKey = 'YOUR_GOOGLE_API_KEY';
 
 // ★★★ 2. 楽天アプリID ★★★
-const String rakutenAppId = '1075764343336522161'; 
+const String rakutenAppId = 'YOUR_RAKUTEN_APP_ID';
 
 // ★★★ 3. あなたのCloudflare Workers URL ★★★
 // 例: 'https://damp-snow-b9f9.mnagai.workers.dev/'
@@ -99,7 +99,7 @@ class _MapScreenState extends State<MapScreen> {
     canvas.drawCircle(const Offset(size / 2, size / 2), size / 2.2, borderPaint);
     final ui.Image image = await pictureRecorder.endRecording().toImage(size.toInt(), size.toInt());
     final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+    return BitmapDescriptor.bytes(byteData!.buffer.asUint8List());
   }
 
   BitmapDescriptor _getIconForType(String evType) {
@@ -147,7 +147,7 @@ class _MapScreenState extends State<MapScreen> {
     
     try {
       // Cloudflare Workers経由でリクエスト
-      final response = await http.get(Uri.parse('$myProxyUrl?url=' + Uri.encodeComponent(targetUrl)));
+      final response = await http.get(Uri.parse('$myProxyUrl?url=${Uri.encodeComponent(targetUrl)}'));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -176,7 +176,7 @@ class _MapScreenState extends State<MapScreen> {
     
     try {
       // 検索も専用プロキシ経由に変更
-      final response = await http.get(Uri.parse('$myProxyUrl?url=' + Uri.encodeComponent(targetUrl)));
+      final response = await http.get(Uri.parse('$myProxyUrl?url=${Uri.encodeComponent(targetUrl)}'));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -201,7 +201,7 @@ class _MapScreenState extends State<MapScreen> {
       if (permission == LocationPermission.deniedForever) return;
       Position position = await Geolocator.getCurrentPosition();
       setState(() { 
-        _userMarker = Marker(markerId: const MarkerId("my_location"), position: LatLng(position.latitude, position.longitude), icon: _iconMyLocation ?? BitmapDescriptor.defaultMarker, infoWindow: const InfoWindow(title: "現在地"), zIndex: 1000); 
+        _userMarker = Marker(markerId: const MarkerId("my_location"), position: LatLng(position.latitude, position.longitude), icon: _iconMyLocation ?? BitmapDescriptor.defaultMarker, infoWindow: const InfoWindow(title: "現在地"), zIndexInt: 1000); 
         _statusMessage = "";
       });
       final GoogleMapController controller = await _controller.future;
@@ -228,7 +228,7 @@ class _MapScreenState extends State<MapScreen> {
           double lat = 0.0; double lng = 0.0; try { lat = double.parse(getStr(latIdx)); lng = double.parse(getStr(lngIdx)); } catch(e) { continue; }
           if (lat == 0.0 || lng == 0.0) continue;
           loadedHotels.add(Hotel(name: getStr(nameIdx), address: getStr(addrIdx), lat: lat, lng: lng, evType: getStr(evTypeIdx), chargerCount: getStr(countIdx), output: getStr(outputIdx), maxCurrent: getStr(maxCurIdx), category: getStr(catIdx), chargingFee: getStr(feeIdx), parkingFee: getStr(parkIdx), contact: getStr(contactIdx), reservation: getStr(resIdx), manufacturer: getStr(makerIdx), auth: getStr(authIdx), notes: getStr(noteIdx), csvPrice: getStr(priceIdx), csvImageUrl: getStr(imgIdx), csvAffiliateUrl: getStr(affIdx), csvSiteUrl: getStr(siteIdx)));
-        } catch (e) {}
+        } catch (e) { debugPrint("CSV Row Parse Error: $e"); }
       }
       setState(() { _allHotels = loadedHotels; _applyFilter(); });
     } catch (e) { debugPrint("CSV Load Error: $e"); }
@@ -237,7 +237,7 @@ class _MapScreenState extends State<MapScreen> {
   void _applyFilter() { setState(() { if (_selectedFilter == 'すべて') { _filteredHotels = _allHotels; } else { _filteredHotels = _allHotels.where((hotel) { final target = "${hotel.evType} ${hotel.output} ${hotel.category}"; return target.contains(_selectedFilter); }).toList(); } _createMarkers(); }); }
   void _createMarkers() { setState(() { _hotelMarkers = _filteredHotels.map((hotel) { return Marker(markerId: MarkerId(hotel.name), position: LatLng(hotel.lat, hotel.lng), icon: _getIconForType(hotel.evType), onTap: () => _showHotelDetails(hotel)); }).toSet(); }); }
   Future<void> _handleSearchSubmit(String query) async { if (_searchResults.isNotEmpty && _searchResults.length < 5) { _zoomToFitResults(); return; } await _searchPlaceAndMove(query); }
-  Future<void> _goToHotel(Hotel hotel) async { final GoogleMapController controller = await _controller.future; FocusScope.of(context).unfocus(); setState(() { _isSearching = false; _searchController.clear(); }); controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(hotel.lat, hotel.lng), zoom: 15))); if (mounted) { _showHotelDetails(hotel); } }
+  Future<void> _goToHotel(Hotel hotel) async { FocusScope.of(context).unfocus(); final GoogleMapController controller = await _controller.future; if (!mounted) return; setState(() { _isSearching = false; _searchController.clear(); }); controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(hotel.lat, hotel.lng), zoom: 15))); _showHotelDetails(hotel); }
   Future<void> _zoomToFitResults() async { if (_searchResults.isEmpty) return; final GoogleMapController controller = await _controller.future; if (_searchResults.length == 1) { controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(_searchResults[0].lat, _searchResults[0].lng), zoom: 15))); return; } double minLat = _searchResults[0].lat; double maxLat = _searchResults[0].lat; double minLng = _searchResults[0].lng; double maxLng = _searchResults[0].lng; for (var hotel in _searchResults) { if (hotel.lat < minLat) minLat = hotel.lat; if (hotel.lat > maxLat) maxLat = hotel.lat; if (hotel.lng < minLng) minLng = hotel.lng; if (hotel.lng > maxLng) maxLng = hotel.lng; } controller.animateCamera(CameraUpdate.newLatLngBounds(LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)), 50.0)); }
   void _onSearchChanged(String query) { if (query.isEmpty) { setState(() { _isSearching = false; _searchResults = []; }); return; } setState(() { _isSearching = true; final lowerQuery = query.toLowerCase(); _searchResults = _filteredHotels.where((hotel) { final content = "${hotel.name} ${hotel.address} ${hotel.evType} ${hotel.notes} ${hotel.contact} ${hotel.category} ${hotel.manufacturer}".toLowerCase(); return content.contains(lowerQuery); }).toList(); }); }
 
@@ -254,7 +254,7 @@ class _MapScreenState extends State<MapScreen> {
           if (r.minPrice != null) {
             final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
             final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
-            displayPrice = "${formattedPrice}円(税込)〜"; 
+            displayPrice = "$formattedPrice円(税込)〜"; 
           }
           if (r.hotelUrl != null) displayUrl = r.hotelUrl!; 
           review = r.reviewAverage; 
@@ -312,7 +312,7 @@ class _MapScreenState extends State<MapScreen> {
         SafeArea(child: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 0), child: Card(elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), child: TextField(controller: _searchController, textInputAction: TextInputAction.search, onSubmitted: (value) { _handleSearchSubmit(value); }, decoration: const InputDecoration(hintText: "場所（新宿駅）、ホテル名、充電タイプ", prefixIcon: Icon(Icons.search), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15)), onChanged: _onSearchChanged))),
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),
-          if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
+          if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
         ])),
         Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
       ]),
