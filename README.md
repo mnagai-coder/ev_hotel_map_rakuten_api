@@ -32,7 +32,7 @@ flutter run \
 
 2. Repository Settings > Pages で `Build and deployment` の Source を `GitHub Actions` にします。
 
-3. `main` に push すると `.github/workflows/deploy-pages.yml` が自動でWebをビルドして公開します。
+3. `main` に push すると `.github/workflows/deploy-pages.yml` が自動でWebをビルドして公開します（`docs/` は不要です）。
 
 ## 要件定義
 
