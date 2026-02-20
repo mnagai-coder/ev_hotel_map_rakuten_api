@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:csv/csv.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:geolocator/geolocator.dart';
@@ -246,11 +245,17 @@ class _MapScreenState extends State<MapScreen> {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
       return Dialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), insetPadding: const EdgeInsets.all(16), child: PointerInterceptor(child: FutureBuilder<RakutenData?>(future: rakutenFuture, builder: (context, snapshot) {
         
-        String displayImage = ""; String displayPrice = ""; String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; String? review; bool isRakuten = false;
+        String cleanText(String value) {
+          final v = value.trim();
+          if (v.isEmpty || v.toLowerCase() == "nan") return "";
+          return v;
+        }
+
+        String displayImage = cleanText(hotel.csvImageUrl); String displayPrice = ""; String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; String? review; bool isRakuten = false;
         
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
-          if (r.imageUrl != null) displayImage = r.imageUrl!; 
+          if (r.imageUrl != null && cleanText(r.imageUrl!) != "") displayImage = cleanText(r.imageUrl!); 
           if (r.minPrice != null) {
             final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
             final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
@@ -264,19 +269,12 @@ class _MapScreenState extends State<MapScreen> {
         String buttonText = "関連サイトを見る";
         if (isRakuten || hotel.csvAffiliateUrl.isNotEmpty) { buttonText = "楽天トラベルで空室確認"; }
 
-        // ★修正: プロキシURLを使って画像を表示（画像の取得も高速化）
-        String proxyImageUrl(String url) {
-          if (url.isEmpty || !url.startsWith('http')) return "";
-          // Cloudflare経由で画像を取る（CORS回避＆高速化）
-          return "$myProxyUrl?url=${Uri.encodeComponent(url)}";
-        }
-
         Widget infoRow(String label, String value, {bool isLink = false, VoidCallback? onTap}) { if (value.isEmpty || value == "nan") return const SizedBox.shrink(); return Padding(padding: const EdgeInsets.only(bottom: 8.0), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))), Expanded(child: GestureDetector(onTap: isLink ? onTap : null, child: Text(value, style: TextStyle(fontSize: 14, color: isLink ? Colors.blue : Colors.black87, decoration: isLink ? TextDecoration.underline : null))))])); }
         Widget sectionTitle(String title) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 8), child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)));
         
         return Column(mainAxisSize: MainAxisSize.min, children: [
           Stack(alignment: Alignment.topRight, children: [
-            ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(20)), child: displayImage.isNotEmpty ? CachedNetworkImage(imageUrl: proxyImageUrl(displayImage), height: 200, width: double.infinity, fit: BoxFit.cover, placeholder: (context, url) => Container(height: 200, color: Colors.grey[200]), errorWidget: (context, url, error) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey))) : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50))),
+            ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(20)), child: displayImage.isNotEmpty ? Image.network(displayImage, height: 200, width: double.infinity, fit: BoxFit.cover, loadingBuilder: (context, child, progress) => progress == null ? child : Container(height: 200, color: Colors.grey[200]), errorBuilder: (context, error, stackTrace) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey))) : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50))),
             Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
