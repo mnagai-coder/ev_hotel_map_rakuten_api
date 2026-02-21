@@ -282,7 +282,12 @@ class _MapScreenState extends State<MapScreen> {
           return v;
         }
 
-        String displayImage = cleanText(hotel.csvImageUrl); String displayPrice = ""; String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl; String? review; bool isRakuten = false;
+        final bool shouldPreferRakuten = rakutenAppId != 'YOUR_RAKUTEN_APP_ID';
+        String displayImage = shouldPreferRakuten ? "" : cleanText(hotel.csvImageUrl);
+        String displayPrice = "";
+        String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl;
+        String? review;
+        bool isRakuten = false;
         
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
@@ -295,6 +300,8 @@ class _MapScreenState extends State<MapScreen> {
           if (r.hotelUrl != null) displayUrl = r.hotelUrl!; 
           review = r.reviewAverage; 
           isRakuten = (r.minPrice != null); 
+        } else if (snapshot.connectionState == ConnectionState.done && (snapshot.data == null || !snapshot.hasData)) {
+          if (displayImage.isEmpty) displayImage = cleanText(hotel.csvImageUrl);
         }
         
         String buttonText = "関連サイトを見る";
