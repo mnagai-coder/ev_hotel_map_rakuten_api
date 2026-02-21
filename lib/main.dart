@@ -11,6 +11,8 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'web_embed_stub.dart' if (dart.library.html) 'web_embed.dart';
 
 // ★★★ 1. Google Maps APIキー ★★★
 const String googleMapsApiKey = String.fromEnvironment(
@@ -287,6 +289,58 @@ class _MapScreenState extends State<MapScreen> {
     return '$myProxyUrl?url=${Uri.encodeComponent(url)}';
   }
 
+  String _buildEmbedMapUrl(Hotel hotel) {
+    if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') return "";
+    if (_userMarker != null) {
+      final o = _userMarker!.position;
+      return "https://www.google.com/maps/embed/v1/directions?key=$googleMapsApiKey&origin=${o.latitude},${o.longitude}&destination=${hotel.lat},${hotel.lng}&mode=driving";
+    }
+    return "https://www.google.com/maps/embed/v1/place?key=$googleMapsApiKey&q=${hotel.lat},${hotel.lng}";
+  }
+
+  Future<void> _openUrlInApp(String title, String url) async {
+    if (url.isEmpty || url == "nan") return;
+    if (kIsWeb) {
+      showDialog(
+        context: context,
+        barrierDismissible: true,
+        builder: (context) {
+          final size = MediaQuery.of(context).size;
+          return Dialog(
+            insetPadding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: size.width * 0.9,
+              height: size.height * 0.85,
+              child: Column(
+                children: [
+                  Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    alignment: Alignment.centerLeft,
+                    color: Colors.grey[100],
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold))),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(child: buildEmbeddedWebView(url)),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } else {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.inAppWebView);
+      }
+    }
+  }
+
   void _showHotelDetails(Hotel hotel) {
     showDialog(context: context, barrierDismissible: true, builder: (context) {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
@@ -368,7 +422,20 @@ class _MapScreenState extends State<MapScreen> {
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
-            SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("Googleマップでルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { final Uri url = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}"); if (await canLaunchUrl(url)) { await launchUrl(url, mode: LaunchMode.externalApplication); } })),
+            SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async {
+              if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください'))); return; }
+              if (kIsWeb) {
+                final embedUrl = _buildEmbedMapUrl(hotel);
+                if (embedUrl.isNotEmpty) { await _openUrlInApp("ルート案内", embedUrl); }
+              } else {
+                final origin = _userMarker != null ? "${_userMarker!.position.latitude},${_userMarker!.position.longitude}" : "";
+                final String url = origin.isNotEmpty
+                    ? "https://www.google.com/maps/dir/?api=1&origin=$origin&destination=${hotel.lat},${hotel.lng}"
+                    : "https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}";
+                final Uri uri = Uri.parse(url);
+                if (await canLaunchUrl(uri)) { await launchUrl(uri, mode: LaunchMode.inAppWebView); }
+              }
+            })),
             const SizedBox(height: 16),
             if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: Text("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
             if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), Text(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
@@ -377,7 +444,7 @@ class _MapScreenState extends State<MapScreen> {
             sectionTitle("🅿️ 利用・料金"), infoRow("充電課金", hotel.chargingFee), infoRow("駐車料金", hotel.parkingFee), infoRow("連絡・申込", hotel.contact), infoRow("事前予約", hotel.reservation),
             if (hotel.notes.isNotEmpty && hotel.notes != "nan") ...[sectionTitle("📝 備考"), Container(width: double.infinity, padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Text(hotel.notes, style: const TextStyle(fontSize: 13, height: 1.4)))],
           ]))),
-          if (displayUrl.isNotEmpty && displayUrl != "nan") Padding(padding: const EdgeInsets.all(16.0), child: SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white, elevation: 5, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), onPressed: () async { final Uri url = Uri.parse(displayUrl); if (await canLaunchUrl(url)) { await launchUrl(url); } }, child: Text(buttonText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))))),
+          if (displayUrl.isNotEmpty && displayUrl != "nan") Padding(padding: const EdgeInsets.all(16.0), child: SizedBox(width: double.infinity, height: 50, child: ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white, elevation: 5, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), onPressed: () async { await _openUrlInApp(buttonText, displayUrl); }, child: Text(buttonText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))))),
         ]);
       })));
     });
