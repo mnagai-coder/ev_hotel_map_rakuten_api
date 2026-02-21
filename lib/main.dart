@@ -384,8 +384,9 @@ class _MapScreenState extends State<MapScreen> {
         final displayImageForLoad = _proxiedImageUrl(displayImage);
         _prefetchImageIfNeeded(displayImageForLoad);
         final dpr = MediaQuery.of(context).devicePixelRatio;
+        final imageHeight = size.width >= 900 ? 260.0 : 200.0;
         final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
-        final cacheHeight = (200 * dpr).round();
+        final cacheHeight = (imageHeight * dpr).round();
         
         final size = MediaQuery.of(context).size;
         return SizedBox(
@@ -399,7 +400,7 @@ class _MapScreenState extends State<MapScreen> {
                   child: displayImageForLoad.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: displayImageForLoad,
-                          height: 200,
+                          height: imageHeight,
                           width: double.infinity,
                           fit: BoxFit.cover,
                           memCacheWidth: cacheWidth,
@@ -408,17 +409,17 @@ class _MapScreenState extends State<MapScreen> {
                           maxHeightDiskCache: cacheHeight,
                           fadeInDuration: const Duration(milliseconds: 120),
                           useOldImageOnUrlChange: true,
-                          placeholder: (context, url) => Container(height: 200, color: Colors.grey[200]),
+                          placeholder: (context, url) => Container(height: imageHeight, color: Colors.grey[200]),
                           imageBuilder: (context, provider) => Image(
                             image: provider,
-                            height: 200,
+                            height: imageHeight,
                             width: double.infinity,
                             fit: BoxFit.cover,
                             filterQuality: FilterQuality.high,
                           ),
-                          errorWidget: (context, url, error) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey)),
+                          errorWidget: (context, url, error) => Container(height: imageHeight, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey)),
                         )
-                      : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50)),
+                      : Container(height: imageHeight, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50)),
                 ),
                 Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
                 if (imageSource.isNotEmpty) Positioned(left: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)), child: Text("Image: $imageSource", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
