@@ -385,7 +385,7 @@ class _MapScreenState extends State<MapScreen> {
         _prefetchImageIfNeeded(displayImageForLoad);
         final size = MediaQuery.of(context).size;
         final dpr = MediaQuery.of(context).devicePixelRatio;
-        final imageHeight = size.width >= 900 ? 260.0 : 200.0;
+        final imageHeight = size.width >= 900 ? 320.0 : 200.0;
         final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
         final cacheHeight = (imageHeight * dpr).round();
         return SizedBox(
