@@ -387,7 +387,11 @@ class _MapScreenState extends State<MapScreen> {
         final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
         final cacheHeight = (200 * dpr).round();
         
-        return Column(mainAxisSize: MainAxisSize.min, children: [
+        final size = MediaQuery.of(context).size;
+        return SizedBox(
+          height: size.height * 0.9,
+          width: double.infinity,
+          child: Column(children: [
           Stack(alignment: Alignment.topRight, children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
@@ -419,7 +423,7 @@ class _MapScreenState extends State<MapScreen> {
             if (imageSource.isNotEmpty) Positioned(left: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)), child: Text("Image: $imageSource", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
-          Flexible(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
@@ -466,7 +470,8 @@ class _MapScreenState extends State<MapScreen> {
                 ),
               ),
             ),
-        ]);
+        ]),
+        );
       })));
     });
   }
