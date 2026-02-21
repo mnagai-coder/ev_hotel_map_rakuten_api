@@ -311,6 +311,7 @@ class _MapScreenState extends State<MapScreen> {
         final bool shouldPreferRakuten = rakutenAppId != 'YOUR_RAKUTEN_APP_ID';
         String displayImage = shouldPreferRakuten ? "" : cleanText(hotel.csvImageUrl);
         String imageSource = displayImage.isNotEmpty ? "CSV" : "";
+        String imageUrlDebug = displayImage;
         String displayPrice = "";
         String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl;
         String? review;
@@ -318,7 +319,7 @@ class _MapScreenState extends State<MapScreen> {
         
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
-          if (r.imageUrl != null && cleanText(r.imageUrl!) != "") { displayImage = cleanText(r.imageUrl!); imageSource = "Rakuten"; }
+          if (r.imageUrl != null && cleanText(r.imageUrl!) != "") { displayImage = cleanText(r.imageUrl!); imageSource = "Rakuten"; imageUrlDebug = displayImage; }
           if (r.minPrice != null) {
             final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
             final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
@@ -328,7 +329,7 @@ class _MapScreenState extends State<MapScreen> {
           review = r.reviewAverage; 
           isRakuten = (r.minPrice != null); 
         } else if (snapshot.connectionState == ConnectionState.done && (snapshot.data == null || !snapshot.hasData)) {
-          if (displayImage.isEmpty) { displayImage = cleanText(hotel.csvImageUrl); imageSource = displayImage.isNotEmpty ? "CSV" : ""; }
+          if (displayImage.isEmpty) { displayImage = cleanText(hotel.csvImageUrl); imageSource = displayImage.isNotEmpty ? "CSV" : ""; imageUrlDebug = displayImage; }
         }
         
         String buttonText = "関連サイトを見る";
@@ -376,6 +377,7 @@ class _MapScreenState extends State<MapScreen> {
           Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (_rakutenDebugStatus.isNotEmpty) ...[const SizedBox(height: 6), Text("Rakuten API: $_rakutenDebugStatus", style: const TextStyle(fontSize: 12, color: Colors.redAccent))],
+            if (imageUrlDebug.isNotEmpty) ...[const SizedBox(height: 6), Text("Image URL: $imageUrlDebug", style: const TextStyle(fontSize: 11, color: Colors.black54))],
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
             SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("Googleマップでルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { final Uri url = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}"); if (await canLaunchUrl(url)) { await launchUrl(url, mode: LaunchMode.externalApplication); } })),
