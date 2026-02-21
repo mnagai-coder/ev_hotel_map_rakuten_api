@@ -74,6 +74,7 @@ class _MapScreenState extends State<MapScreen> {
   Set<Marker> _hotelMarkers = {}; 
   Marker? _userMarker;
   Set<Polyline> _routePolylines = {};
+  String _routeDebug = "";
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "";
@@ -400,11 +401,13 @@ class _MapScreenState extends State<MapScreen> {
           : '$myProxyUrl?url=${Uri.encodeComponent(url)}';
       final response = await http.get(Uri.parse(requestUrl));
       if (response.statusCode != 200) {
+        setState(() { _routeDebug = "HTTP ${response.statusCode}"; });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルート取得に失敗しました')));
         return;
       }
       final data = json.decode(response.body);
       if (data['routes'] == null || data['routes'].isEmpty) {
+        setState(() { _routeDebug = "No routes: ${data['status'] ?? 'unknown'}"; });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルートが見つかりません')));
         return;
       }
@@ -420,10 +423,12 @@ class _MapScreenState extends State<MapScreen> {
             points: points,
           ),
         };
+        _routeDebug = "OK points=${points.length}";
       });
       final controller = await _controller.future;
       controller.animateCamera(CameraUpdate.newLatLngBounds(_boundsFromPoints(points), 60));
     } catch (_) {
+      setState(() { _routeDebug = "Exception"; });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルート取得に失敗しました')));
     }
   }
@@ -539,7 +544,7 @@ class _MapScreenState extends State<MapScreen> {
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),
           if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
         ])),
-        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
+        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), if (_routeDebug.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_routeDebug, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
       ]),
     );
   }
