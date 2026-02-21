@@ -170,7 +170,9 @@ class _MapScreenState extends State<MapScreen> {
       final contentType = response.headers['content-type'] ?? '';
       _rakutenDebugStatus = "HTTP ${response.statusCode} / $contentType";
       if (!contentType.contains('application/json')) {
-        _rakutenDebugStatus = "Non-JSON response (check proxy/CORS)";
+        final head = response.body.trimLeft();
+        final snippet = head.length > 60 ? head.substring(0, 60) : head;
+        _rakutenDebugStatus = "Non-JSON HTTP ${response.statusCode} / $contentType / head: ${snippet.replaceAll('\n', ' ')}";
         return null;
       }
       
