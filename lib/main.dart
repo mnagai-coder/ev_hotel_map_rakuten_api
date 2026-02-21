@@ -73,6 +73,7 @@ class _MapScreenState extends State<MapScreen> {
   final Completer<GoogleMapController> _controller = Completer();
   Set<Marker> _hotelMarkers = {}; 
   Marker? _userMarker;
+  Set<Polyline> _routePolylines = {};
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "";
@@ -289,15 +290,6 @@ class _MapScreenState extends State<MapScreen> {
     return '$myProxyUrl?url=${Uri.encodeComponent(url)}';
   }
 
-  String _buildEmbedMapUrl(Hotel hotel) {
-    if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') return "";
-    if (_userMarker != null) {
-      final o = _userMarker!.position;
-      return "https://www.google.com/maps/embed/v1/directions?key=$googleMapsApiKey&origin=${o.latitude},${o.longitude}&destination=${hotel.lat},${hotel.lng}&mode=driving";
-    }
-    return "https://www.google.com/maps/embed/v1/place?key=$googleMapsApiKey&q=${hotel.lat},${hotel.lng}";
-  }
-
   Future<void> _openUrlInApp(String title, String url) async {
     if (url.isEmpty || url == "nan") return;
     if (kIsWeb) {
@@ -338,6 +330,101 @@ class _MapScreenState extends State<MapScreen> {
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.inAppWebView);
       }
+    }
+  }
+
+  List<LatLng> _decodePolyline(String encoded) {
+    List<LatLng> points = [];
+    int index = 0, lat = 0, lng = 0;
+    while (index < encoded.length) {
+      int b, shift = 0, result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlat = (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.codeUnitAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      int dlng = (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
+      lng += dlng;
+
+      points.add(LatLng(lat / 1e5, lng / 1e5));
+    }
+    return points;
+  }
+
+  LatLngBounds _boundsFromPoints(List<LatLng> points) {
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    return LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+  }
+
+  Future<void> _showRouteInMap(Hotel hotel) async {
+    if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください')));
+      return;
+    }
+    if (_userMarker == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('現在地が取得できません')));
+      return;
+    }
+    final origin = _userMarker!.position;
+    final url = "https://maps.googleapis.com/maps/api/directions/json"
+        "?origin=${origin.latitude},${origin.longitude}"
+        "&destination=${hotel.lat},${hotel.lng}"
+        "&mode=driving"
+        "&key=$googleMapsApiKey";
+
+    try {
+      final requestUrl = myProxyUrl == 'YOUR_CLOUDFLARE_URL'
+          ? url
+          : '$myProxyUrl?url=${Uri.encodeComponent(url)}';
+      final response = await http.get(Uri.parse(requestUrl));
+      if (response.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルート取得に失敗しました')));
+        return;
+      }
+      final data = json.decode(response.body);
+      if (data['routes'] == null || data['routes'].isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルートが見つかりません')));
+        return;
+      }
+      final encoded = data['routes'][0]['overview_polyline']['points'] as String;
+      final points = _decodePolyline(encoded);
+      if (points.isEmpty) return;
+      setState(() {
+        _routePolylines = {
+          Polyline(
+            polylineId: const PolylineId('route'),
+            color: Colors.blue,
+            width: 5,
+            points: points,
+          ),
+        };
+      });
+      final controller = await _controller.future;
+      controller.animateCamera(CameraUpdate.newLatLngBounds(_boundsFromPoints(points), 60));
+    } catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルート取得に失敗しました')));
     }
   }
 
@@ -422,20 +509,7 @@ class _MapScreenState extends State<MapScreen> {
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
-            SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async {
-              if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください'))); return; }
-              if (kIsWeb) {
-                final embedUrl = _buildEmbedMapUrl(hotel);
-                if (embedUrl.isNotEmpty) { await _openUrlInApp("ルート案内", embedUrl); }
-              } else {
-                final origin = _userMarker != null ? "${_userMarker!.position.latitude},${_userMarker!.position.longitude}" : "";
-                final String url = origin.isNotEmpty
-                    ? "https://www.google.com/maps/dir/?api=1&origin=$origin&destination=${hotel.lat},${hotel.lng}"
-                    : "https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}";
-                final Uri uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) { await launchUrl(uri, mode: LaunchMode.inAppWebView); }
-              }
-            })),
+            SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { await _showRouteInMap(hotel); })),
             const SizedBox(height: 16),
             if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: Text("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
             if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), Text(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
@@ -459,7 +533,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(children: [
-        GoogleMap(mapType: MapType.normal, initialCameraPosition: _kTokyoStation, markers: _hotelMarkers.union(_userMarker != null ? {_userMarker!} : {}), myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onMapCreated: (GoogleMapController controller) { _controller.complete(controller); }),
+        GoogleMap(mapType: MapType.normal, initialCameraPosition: _kTokyoStation, markers: _hotelMarkers.union(_userMarker != null ? {_userMarker!} : {}), polylines: _routePolylines, myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onMapCreated: (GoogleMapController controller) { _controller.complete(controller); }),
         SafeArea(child: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 0), child: Card(elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), child: TextField(controller: _searchController, textInputAction: TextInputAction.search, onSubmitted: (value) { _handleSearchSubmit(value); }, decoration: const InputDecoration(hintText: "場所（新宿駅）、ホテル名、充電タイプ", prefixIcon: Icon(Icons.search), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15)), onChanged: _onSearchChanged))),
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),

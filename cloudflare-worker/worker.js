@@ -17,6 +17,7 @@ export default {
       "https://app.rakuten.co.jp",
       "https://img.travel.rakuten.co.jp",
       "https://travel.rakuten.co.jp",
+      "https://maps.googleapis.com",
     ];
     if (!allowedOrigins.includes(targetUrl.origin)) {
       return new Response("Forbidden", { status: 403 });
