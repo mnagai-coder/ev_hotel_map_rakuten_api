@@ -85,6 +85,7 @@ class _MapScreenState extends State<MapScreen> {
   List<RouteOption> _routeOptions = [];
   int _selectedRouteIndex = -1;
   String _routeTitle = "";
+  bool _showRoutePanel = false;
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "";
@@ -494,6 +495,14 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  void _clearRoute() {
+    setState(() {
+      _routePolylines = {};
+      _routeOptions = [];
+      _selectedRouteIndex = -1;
+    });
+  }
+
   void _showHotelDetails(Hotel hotel) {
     showDialog(context: context, barrierDismissible: true, builder: (context) {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
@@ -575,8 +584,53 @@ class _MapScreenState extends State<MapScreen> {
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
-            SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { await _showRouteInMap(hotel); })),
+            SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { setState(() { _showRoutePanel = true; }); await _showRouteInMap(hotel); })),
             const SizedBox(height: 16),
+            if (_showRoutePanel && _routeOptions.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey.shade300)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text(_routeTitle, style: const TextStyle(fontWeight: FontWeight.bold))),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: () { _clearRoute(); },
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 1),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _routeOptions.length,
+                      itemBuilder: (context, index) {
+                        final option = _routeOptions[index];
+                        final isSelected = index == _selectedRouteIndex;
+                        return ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text("${option.durationText} ・ ${option.distanceText}", style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                          subtitle: option.hasTolls ? const Text("有料道路を含む", style: TextStyle(color: Colors.orange)) : null,
+                          trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.blue) : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedRouteIndex = index;
+                              _routePolylines = {
+                                Polyline(polylineId: const PolylineId('route'), color: Colors.blue, width: 5, points: option.points),
+                              };
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
             if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: Text("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
             if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), Text(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
             const Divider(height: 10), 
@@ -600,57 +654,6 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       body: Stack(children: [
         GoogleMap(mapType: MapType.normal, initialCameraPosition: _kTokyoStation, markers: _hotelMarkers.union(_userMarker != null ? {_userMarker!} : {}), polylines: _routePolylines, myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onMapCreated: (GoogleMapController controller) { _controller.complete(controller); }),
-        if (_routeOptions.isNotEmpty)
-          Positioned(
-            left: 12,
-            top: 90,
-            child: Container(
-              width: MediaQuery.of(context).size.width < 600 ? MediaQuery.of(context).size.width * 0.9 : 340,
-              constraints: const BoxConstraints(maxHeight: 520),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-                    child: Row(
-                      children: [
-                        Expanded(child: Text(_routeTitle, style: const TextStyle(fontWeight: FontWeight.bold))),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () { setState(() { _routePolylines = {}; _selectedRouteIndex = -1; }); },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _routeOptions.length,
-                      itemBuilder: (context, index) {
-                        final option = _routeOptions[index];
-                        final isSelected = index == _selectedRouteIndex;
-                        return ListTile(
-                          title: Text("${option.durationText} ・ ${option.distanceText}", style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                          subtitle: option.hasTolls ? const Text("有料道路を含む", style: TextStyle(color: Colors.orange)) : null,
-                          trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.blue) : null,
-                          onTap: () {
-                            setState(() {
-                              _selectedRouteIndex = index;
-                              _routePolylines = {
-                                Polyline(polylineId: const PolylineId('route'), color: Colors.blue, width: 5, points: option.points),
-                              };
-                            });
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         SafeArea(child: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 0), child: Card(elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), child: TextField(controller: _searchController, textInputAction: TextInputAction.search, onSubmitted: (value) { _handleSearchSubmit(value); }, decoration: const InputDecoration(hintText: "場所（新宿駅）、ホテル名、充電タイプ", prefixIcon: Icon(Icons.search), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15)), onChanged: _onSearchChanged))),
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),
