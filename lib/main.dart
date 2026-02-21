@@ -154,12 +154,25 @@ class _MapScreenState extends State<MapScreen> {
 
   // ★修正：専用プロキシを使用する高速検索
   Future<RakutenData?> _searchApi(String keyword) async {
+    if (myProxyUrl == 'YOUR_CLOUDFLARE_URL') {
+      _rakutenDebugStatus = "Proxy URL not set";
+      return null;
+    }
+    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') {
+      _rakutenDebugStatus = "Rakuten App ID not set";
+      return null;
+    }
     final targetUrl = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&responseType=large&hotelThumbnailSize=3&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId';
     
     try {
       // Cloudflare Workers経由でリクエスト
       final response = await http.get(Uri.parse('$myProxyUrl?url=${Uri.encodeComponent(targetUrl)}'));
-      _rakutenDebugStatus = "HTTP ${response.statusCode}";
+      final contentType = response.headers['content-type'] ?? '';
+      _rakutenDebugStatus = "HTTP ${response.statusCode} / $contentType";
+      if (!contentType.contains('application/json')) {
+        _rakutenDebugStatus = "Non-JSON response (check proxy/CORS)";
+        return null;
+      }
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
