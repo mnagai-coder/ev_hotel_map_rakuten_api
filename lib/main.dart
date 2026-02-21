@@ -79,7 +79,6 @@ class _MapScreenState extends State<MapScreen> {
   // キャッシュ
   final Map<String, RakutenData?> _rakutenCache = {};
   final Set<String> _prefetchedImageUrls = {};
-  String _rakutenDebugStatus = "";
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
 
@@ -154,32 +153,21 @@ class _MapScreenState extends State<MapScreen> {
 
   // ★修正：専用プロキシを使用する高速検索
   Future<RakutenData?> _searchApi(String keyword) async {
-    if (myProxyUrl == 'YOUR_CLOUDFLARE_URL') {
-      _rakutenDebugStatus = "Proxy URL not set";
-      return null;
-    }
-    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') {
-      _rakutenDebugStatus = "Rakuten App ID not set";
-      return null;
-    }
+    if (myProxyUrl == 'YOUR_CLOUDFLARE_URL') return null;
+    if (rakutenAppId == 'YOUR_RAKUTEN_APP_ID') return null;
     final targetUrl = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&responseType=large&hotelThumbnailSize=3&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId';
     
     try {
       // Cloudflare Workers経由でリクエスト
       final response = await http.get(Uri.parse('$myProxyUrl?url=${Uri.encodeComponent(targetUrl)}'));
       final contentType = response.headers['content-type'] ?? '';
-      _rakutenDebugStatus = "HTTP ${response.statusCode} / $contentType";
       if (!contentType.contains('application/json')) {
-        final head = response.body.trimLeft();
-        final snippet = head.length > 60 ? head.substring(0, 60) : head;
-        _rakutenDebugStatus = "Non-JSON HTTP ${response.statusCode} / $contentType / head: ${snippet.replaceAll('\n', ' ')}";
         return null;
       }
       
       if (response.statusCode == 200) {
         final trimmed = response.body.trimLeft();
         if (trimmed.startsWith('<')) {
-          _rakutenDebugStatus = "HTML response (proxy error page)";
           return null;
         }
         final data = json.decode(response.body);
@@ -205,13 +193,9 @@ class _MapScreenState extends State<MapScreen> {
             reviewAverage: basicInfo['reviewAverage']?.toString(),
           );
         }
-        _rakutenDebugStatus = "HTTP 200 / hotels empty";
-      } else {
-        _rakutenDebugStatus = "HTTP ${response.statusCode}";
       }
     } catch (e) {
       debugPrint("API Error: $e");
-      _rakutenDebugStatus = "API Error: $e";
     }
     return null;
   }
@@ -314,7 +298,7 @@ class _MapScreenState extends State<MapScreen> {
           return v;
         }
 
-        final bool shouldPreferRakuten = rakutenAppId != 'YOUR_RAKUTEN_APP_ID';
+        const bool shouldPreferRakuten = rakutenAppId != 'YOUR_RAKUTEN_APP_ID';
         String displayImage = shouldPreferRakuten ? "" : cleanText(hotel.csvImageUrl);
         String imageSource = displayImage.isNotEmpty ? "CSV" : "";
         String displayPrice = "";
@@ -326,7 +310,7 @@ class _MapScreenState extends State<MapScreen> {
           final r = snapshot.data!; 
           if (r.imageUrl != null && cleanText(r.imageUrl!) != "") { displayImage = cleanText(r.imageUrl!); imageSource = "Rakuten"; }
           if (r.minPrice != null) {
-            final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+            const formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
             final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
             displayPrice = "$formattedPrice円(税込)〜"; 
           }
