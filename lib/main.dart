@@ -50,6 +50,14 @@ class RakutenData {
   RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage});
 }
 
+class RouteOption {
+  final List<LatLng> points;
+  final String distanceText;
+  final String durationText;
+  final bool hasTolls;
+  RouteOption({required this.points, required this.distanceText, required this.durationText, required this.hasTolls});
+}
+
 class EvHotelApp extends StatelessWidget {
   const EvHotelApp({super.key});
   @override
@@ -74,7 +82,9 @@ class _MapScreenState extends State<MapScreen> {
   Set<Marker> _hotelMarkers = {}; 
   Marker? _userMarker;
   Set<Polyline> _routePolylines = {};
-  String _routeDebug = "";
+  List<RouteOption> _routeOptions = [];
+  int _selectedRouteIndex = -1;
+  String _routeTitle = "";
   List<Hotel> _allHotels = []; List<Hotel> _filteredHotels = []; List<Hotel> _searchResults = [];
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false; String _selectedFilter = 'すべて'; String _statusMessage = "";
@@ -362,6 +372,42 @@ class _MapScreenState extends State<MapScreen> {
     return points;
   }
 
+  RouteOption? _parseRouteOption(Map route) {
+    final overview = route['overview_polyline'];
+    if (overview == null || overview['points'] == null) return null;
+    final points = _decodePolyline(overview['points'] as String);
+    if (points.isEmpty) return null;
+
+    final legs = route['legs'];
+    String distanceText = "";
+    String durationText = "";
+    if (legs is List && legs.isNotEmpty) {
+      final leg = legs[0];
+      distanceText = leg['distance']?['text']?.toString() ?? "";
+      durationText = leg['duration']?['text']?.toString() ?? "";
+    }
+
+    bool hasTolls = false;
+    final warnings = route['warnings'];
+    if (warnings is List) {
+      for (final w in warnings) {
+        final s = w.toString().toLowerCase();
+        if (s.contains('toll') || s.contains('有料')) { hasTolls = true; break; }
+      }
+    }
+    if (!hasTolls && legs is List && legs.isNotEmpty) {
+      final steps = legs[0]['steps'];
+      if (steps is List) {
+        for (final step in steps) {
+          final s = step['html_instructions']?.toString().toLowerCase() ?? "";
+          if (s.contains('toll') || s.contains('有料')) { hasTolls = true; break; }
+        }
+      }
+    }
+
+    return RouteOption(points: points, distanceText: distanceText, durationText: durationText, hasTolls: hasTolls);
+  }
+
   LatLngBounds _boundsFromPoints(List<LatLng> points) {
     double minLat = points.first.latitude;
     double maxLat = points.first.latitude;
@@ -393,6 +439,7 @@ class _MapScreenState extends State<MapScreen> {
         "?origin=${origin.latitude},${origin.longitude}"
         "&destination=${hotel.lat},${hotel.lng}"
         "&mode=driving"
+        "&alternatives=true"
         "&key=$googleMapsApiKey";
 
     try {
@@ -401,29 +448,39 @@ class _MapScreenState extends State<MapScreen> {
           : '$myProxyUrl?url=${Uri.encodeComponent(url)}';
       final response = await http.get(Uri.parse(requestUrl));
       if (response.statusCode != 200) {
-        setState(() { _routeDebug = "HTTP ${response.statusCode}"; });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルート取得に失敗しました')));
         return;
       }
       final data = json.decode(response.body);
       if (data['routes'] == null || data['routes'].isEmpty) {
-        setState(() { _routeDebug = "No routes: ${data['status'] ?? 'unknown'}"; });
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルートが見つかりません')));
         return;
       }
-      final encoded = data['routes'][0]['overview_polyline']['points'] as String;
-      final points = _decodePolyline(encoded);
-      if (points.isEmpty) return;
+      final routes = data['routes'] as List;
+      final options = <RouteOption>[];
+      for (final r in routes) {
+        final o = _parseRouteOption(r);
+        if (o != null) options.add(o);
+        if (options.length >= 3) break;
+      }
+      if (options.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルートが見つかりません')));
+        return;
+      }
+
+      final selected = options.first;
       setState(() {
+        _routeOptions = options;
+        _selectedRouteIndex = 0;
+        _routeTitle = "現在地 → ${hotel.name}";
         _routePolylines = {
           Polyline(
             polylineId: const PolylineId('route'),
             color: Colors.blue,
             width: 5,
-            points: points,
+            points: selected.points,
           ),
         };
-        _routeDebug = "OK points=${points.length}";
       });
       final controller = await _controller.future;
       final bounds = _boundsFromPoints([origin, LatLng(hotel.lat, hotel.lng)]);
@@ -433,7 +490,6 @@ class _MapScreenState extends State<MapScreen> {
         controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(hotel.lat, hotel.lng), zoom: 12)));
       }
     } catch (_) {
-      setState(() { _routeDebug = "Exception"; });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルート取得に失敗しました')));
     }
   }
@@ -544,12 +600,63 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       body: Stack(children: [
         GoogleMap(mapType: MapType.normal, initialCameraPosition: _kTokyoStation, markers: _hotelMarkers.union(_userMarker != null ? {_userMarker!} : {}), polylines: _routePolylines, myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onMapCreated: (GoogleMapController controller) { _controller.complete(controller); }),
+        if (_routeOptions.isNotEmpty)
+          Positioned(
+            left: 12,
+            top: 90,
+            child: Container(
+              width: MediaQuery.of(context).size.width < 600 ? MediaQuery.of(context).size.width * 0.9 : 340,
+              constraints: const BoxConstraints(maxHeight: 520),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                    child: Row(
+                      children: [
+                        Expanded(child: Text(_routeTitle, style: const TextStyle(fontWeight: FontWeight.bold))),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () { setState(() { _routePolylines = {}; _selectedRouteIndex = -1; }); },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: _routeOptions.length,
+                      itemBuilder: (context, index) {
+                        final option = _routeOptions[index];
+                        final isSelected = index == _selectedRouteIndex;
+                        return ListTile(
+                          title: Text("${option.durationText} ・ ${option.distanceText}", style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                          subtitle: option.hasTolls ? const Text("有料道路を含む", style: TextStyle(color: Colors.orange)) : null,
+                          trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.blue) : null,
+                          onTap: () {
+                            setState(() {
+                              _selectedRouteIndex = index;
+                              _routePolylines = {
+                                Polyline(polylineId: const PolylineId('route'), color: Colors.blue, width: 5, points: option.points),
+                              };
+                            });
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         SafeArea(child: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 0), child: Card(elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), child: TextField(controller: _searchController, textInputAction: TextInputAction.search, onSubmitted: (value) { _handleSearchSubmit(value); }, decoration: const InputDecoration(hintText: "場所（新宿駅）、ホテル名、充電タイプ", prefixIcon: Icon(Icons.search), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15)), onChanged: _onSearchChanged))),
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),
           if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
         ])),
-        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), if (_routeDebug.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_routeDebug, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
+        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
       ]),
     );
   }
