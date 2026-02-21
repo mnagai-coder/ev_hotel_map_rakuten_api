@@ -175,6 +175,11 @@ class _MapScreenState extends State<MapScreen> {
       }
       
       if (response.statusCode == 200) {
+        final trimmed = response.body.trimLeft();
+        if (trimmed.startsWith('<')) {
+          _rakutenDebugStatus = "HTML response (proxy error page)";
+          return null;
+        }
         final data = json.decode(response.body);
         if (data['hotels'] != null && data['hotels'].isNotEmpty) {
           final basicInfo = data['hotels'][0]['hotel'][0]['hotelBasicInfo'];
