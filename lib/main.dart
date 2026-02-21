@@ -426,7 +426,12 @@ class _MapScreenState extends State<MapScreen> {
         _routeDebug = "OK points=${points.length}";
       });
       final controller = await _controller.future;
-      controller.animateCamera(CameraUpdate.newLatLngBounds(_boundsFromPoints(points), 60));
+      final bounds = _boundsFromPoints([origin, LatLng(hotel.lat, hotel.lng)]);
+      try {
+        controller.animateCamera(CameraUpdate.newLatLngBounds(bounds, 80));
+      } catch (_) {
+        controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(hotel.lat, hotel.lng), zoom: 12)));
+      }
     } catch (_) {
       setState(() { _routeDebug = "Exception"; });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ルート取得に失敗しました')));
