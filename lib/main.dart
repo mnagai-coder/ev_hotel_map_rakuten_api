@@ -373,10 +373,24 @@ class _MapScreenState extends State<MapScreen> {
     return points;
   }
 
+  List<LatLng> _normalizeRoutePoints(List<LatLng> points) {
+    if (points.isEmpty) return points;
+    int outLat = 0;
+    int outLng = 0;
+    for (final p in points) {
+      if (p.latitude.abs() > 90) outLat++;
+      if (p.longitude.abs() > 180) outLng++;
+    }
+    if (outLat > points.length / 2 && outLng <= points.length / 10) {
+      return points.map((p) => LatLng(p.longitude, p.latitude)).toList();
+    }
+    return points;
+  }
+
   RouteOption? _parseRouteOption(Map route) {
     final overview = route['overview_polyline'];
     if (overview == null || overview['points'] == null) return null;
-    final points = _decodePolyline(overview['points'] as String);
+    final points = _normalizeRoutePoints(_decodePolyline(overview['points'] as String));
     if (points.isEmpty) return null;
 
     final legs = route['legs'];
