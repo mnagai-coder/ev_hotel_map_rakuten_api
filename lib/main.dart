@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:cached_network_image/cached_network_image.dart';
 
 // ★★★ 1. Google Maps APIキー ★★★
 const String googleMapsApiKey = String.fromEnvironment(
@@ -77,6 +78,7 @@ class _MapScreenState extends State<MapScreen> {
 
   // キャッシュ
   final Map<String, RakutenData?> _rakutenCache = {};
+  final Set<String> _prefetchedImageUrls = {};
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
 
@@ -151,7 +153,7 @@ class _MapScreenState extends State<MapScreen> {
 
   // ★修正：専用プロキシを使用する高速検索
   Future<RakutenData?> _searchApi(String keyword) async {
-    final targetUrl = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId';
+    final targetUrl = 'https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426?format=json&responseType=large&hotelThumbnailSize=3&keyword=${Uri.encodeComponent(keyword)}&applicationId=$rakutenAppId';
     
     try {
       // Cloudflare Workers経由でリクエスト
@@ -161,8 +163,21 @@ class _MapScreenState extends State<MapScreen> {
         final data = json.decode(response.body);
         if (data['hotels'] != null && data['hotels'].isNotEmpty) {
           final basicInfo = data['hotels'][0]['hotel'][0]['hotelBasicInfo'];
+          String pickBestImage(Map info) {
+            String getStr(String key) => (info[key] ?? '').toString().trim();
+            final candidates = [
+              getStr('hotelImageUrl'),
+              getStr('roomImageUrl'),
+              getStr('hotelThumbnailUrl'),
+              getStr('roomThumbnailUrl'),
+            ];
+            for (final url in candidates) {
+              if (url.isNotEmpty) return url;
+            }
+            return '';
+          }
           return RakutenData(
-            imageUrl: basicInfo['hotelImageUrl'],
+            imageUrl: pickBestImage(basicInfo),
             hotelUrl: basicInfo['hotelInformationUrl'],
             minPrice: basicInfo['hotelMinCharge'],
             reviewAverage: basicInfo['reviewAverage']?.toString(),
@@ -249,6 +264,13 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _zoomToFitResults() async { if (_searchResults.isEmpty) return; final GoogleMapController controller = await _controller.future; if (_searchResults.length == 1) { controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(_searchResults[0].lat, _searchResults[0].lng), zoom: 15))); return; } double minLat = _searchResults[0].lat; double maxLat = _searchResults[0].lat; double minLng = _searchResults[0].lng; double maxLng = _searchResults[0].lng; for (var hotel in _searchResults) { if (hotel.lat < minLat) minLat = hotel.lat; if (hotel.lat > maxLat) maxLat = hotel.lat; if (hotel.lng < minLng) minLng = hotel.lng; if (hotel.lng > maxLng) maxLng = hotel.lng; } controller.animateCamera(CameraUpdate.newLatLngBounds(LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)), 50.0)); }
   void _onSearchChanged(String query) { if (query.isEmpty) { setState(() { _isSearching = false; _searchResults = []; }); return; } setState(() { _isSearching = true; final lowerQuery = query.toLowerCase(); _searchResults = _filteredHotels.where((hotel) { final content = "${hotel.name} ${hotel.address} ${hotel.evType} ${hotel.notes} ${hotel.contact} ${hotel.category} ${hotel.manufacturer}".toLowerCase(); return content.contains(lowerQuery); }).toList(); }); }
 
+  void _prefetchImageIfNeeded(String url) {
+    if (url.isEmpty) return;
+    if (_prefetchedImageUrls.contains(url)) return;
+    _prefetchedImageUrls.add(url);
+    try { precacheImage(CachedNetworkImageProvider(url), context); } catch (_) {}
+  }
+
   void _showHotelDetails(Hotel hotel) {
     showDialog(context: context, barrierDismissible: true, builder: (context) {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
@@ -280,10 +302,39 @@ class _MapScreenState extends State<MapScreen> {
 
         Widget infoRow(String label, String value, {bool isLink = false, VoidCallback? onTap}) { if (value.isEmpty || value == "nan") return const SizedBox.shrink(); return Padding(padding: const EdgeInsets.only(bottom: 8.0), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))), Expanded(child: GestureDetector(onTap: isLink ? onTap : null, child: Text(value, style: TextStyle(fontSize: 14, color: isLink ? Colors.blue : Colors.black87, decoration: isLink ? TextDecoration.underline : null))))])); }
         Widget sectionTitle(String title) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 8), child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)));
+        _prefetchImageIfNeeded(displayImage);
+        final dpr = MediaQuery.of(context).devicePixelRatio;
+        final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
+        final cacheHeight = (200 * dpr).round();
         
         return Column(mainAxisSize: MainAxisSize.min, children: [
           Stack(alignment: Alignment.topRight, children: [
-            ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(20)), child: displayImage.isNotEmpty ? Image.network(displayImage, height: 200, width: double.infinity, fit: BoxFit.cover, webHtmlElementStrategy: WebHtmlElementStrategy.prefer, loadingBuilder: (context, child, progress) => progress == null ? child : Container(height: 200, color: Colors.grey[200]), errorBuilder: (context, error, stackTrace) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey))) : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50))),
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              child: displayImage.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: displayImage,
+                      height: 200,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      memCacheWidth: cacheWidth,
+                      memCacheHeight: cacheHeight,
+                      maxWidthDiskCache: cacheWidth,
+                      maxHeightDiskCache: cacheHeight,
+                      fadeInDuration: const Duration(milliseconds: 120),
+                      useOldImageOnUrlChange: true,
+                      placeholder: (context, url) => Container(height: 200, color: Colors.grey[200]),
+                      imageBuilder: (context, provider) => Image(
+                        image: provider,
+                        height: 200,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.high,
+                      ),
+                      errorWidget: (context, url, error) => Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey)),
+                    )
+                  : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50)),
+            ),
             Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
