@@ -310,7 +310,7 @@ class _MapScreenState extends State<MapScreen> {
           final r = snapshot.data!; 
           if (r.imageUrl != null && cleanText(r.imageUrl!) != "") { displayImage = cleanText(r.imageUrl!); imageSource = "Rakuten"; }
           if (r.minPrice != null) {
-            const formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+            final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
             final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
             displayPrice = "$formattedPrice円(税込)〜"; 
           }
