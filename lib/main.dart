@@ -79,6 +79,7 @@ class _MapScreenState extends State<MapScreen> {
   // キャッシュ
   final Map<String, RakutenData?> _rakutenCache = {};
   final Set<String> _prefetchedImageUrls = {};
+  String _rakutenDebugStatus = "";
 
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
 
@@ -158,6 +159,7 @@ class _MapScreenState extends State<MapScreen> {
     try {
       // Cloudflare Workers経由でリクエスト
       final response = await http.get(Uri.parse('$myProxyUrl?url=${Uri.encodeComponent(targetUrl)}'));
+      _rakutenDebugStatus = "HTTP ${response.statusCode}";
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -183,9 +185,13 @@ class _MapScreenState extends State<MapScreen> {
             reviewAverage: basicInfo['reviewAverage']?.toString(),
           );
         }
+        _rakutenDebugStatus = "HTTP 200 / hotels empty";
+      } else {
+        _rakutenDebugStatus = "HTTP ${response.statusCode}";
       }
     } catch (e) {
       debugPrint("API Error: $e");
+      _rakutenDebugStatus = "API Error: $e";
     }
     return null;
   }
@@ -349,6 +355,7 @@ class _MapScreenState extends State<MapScreen> {
           ]),
           Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            if (_rakutenDebugStatus.isNotEmpty) ...[const SizedBox(height: 6), Text("Rakuten API: $_rakutenDebugStatus", style: const TextStyle(fontSize: 12, color: Colors.redAccent))],
             if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
             const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
             SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("Googleマップでルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async { final Uri url = Uri.parse("https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}"); if (await canLaunchUrl(url)) { await launchUrl(url, mode: LaunchMode.externalApplication); } })),
