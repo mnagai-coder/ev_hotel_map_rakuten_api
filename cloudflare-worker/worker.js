@@ -13,7 +13,12 @@ export default {
       return new Response("Invalid url param", { status: 400 });
     }
 
-    if (targetUrl.origin !== "https://app.rakuten.co.jp") {
+    const allowedOrigins = [
+      "https://app.rakuten.co.jp",
+      "https://img.travel.rakuten.co.jp",
+      "https://travel.rakuten.co.jp",
+    ];
+    if (!allowedOrigins.includes(targetUrl.origin)) {
       return new Response("Forbidden", { status: 403 });
     }
 

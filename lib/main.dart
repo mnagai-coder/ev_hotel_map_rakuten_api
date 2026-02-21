@@ -297,6 +297,12 @@ class _MapScreenState extends State<MapScreen> {
     try { precacheImage(CachedNetworkImageProvider(url), context); } catch (_) {}
   }
 
+  String _proxiedImageUrl(String url) {
+    if (url.isEmpty) return url;
+    if (myProxyUrl == 'YOUR_CLOUDFLARE_URL') return url;
+    return '$myProxyUrl?url=${Uri.encodeComponent(url)}';
+  }
+
   void _showHotelDetails(Hotel hotel) {
     showDialog(context: context, barrierDismissible: true, builder: (context) {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
@@ -337,7 +343,8 @@ class _MapScreenState extends State<MapScreen> {
 
         Widget infoRow(String label, String value, {bool isLink = false, VoidCallback? onTap}) { if (value.isEmpty || value == "nan") return const SizedBox.shrink(); return Padding(padding: const EdgeInsets.only(bottom: 8.0), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))), Expanded(child: GestureDetector(onTap: isLink ? onTap : null, child: Text(value, style: TextStyle(fontSize: 14, color: isLink ? Colors.blue : Colors.black87, decoration: isLink ? TextDecoration.underline : null))))])); }
         Widget sectionTitle(String title) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 8), child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)));
-        _prefetchImageIfNeeded(displayImage);
+        final displayImageForLoad = _proxiedImageUrl(displayImage);
+        _prefetchImageIfNeeded(displayImageForLoad);
         final dpr = MediaQuery.of(context).devicePixelRatio;
         final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
         final cacheHeight = (200 * dpr).round();
@@ -346,9 +353,9 @@ class _MapScreenState extends State<MapScreen> {
           Stack(alignment: Alignment.topRight, children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              child: displayImage.isNotEmpty
+              child: displayImageForLoad.isNotEmpty
                   ? CachedNetworkImage(
-                      imageUrl: displayImage,
+                      imageUrl: displayImageForLoad,
                       height: 200,
                       width: double.infinity,
                       fit: BoxFit.cover,
