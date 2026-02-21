@@ -383,12 +383,11 @@ class _MapScreenState extends State<MapScreen> {
         Widget sectionTitle(String title) => Padding(padding: const EdgeInsets.only(top: 16, bottom: 8), child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)));
         final displayImageForLoad = _proxiedImageUrl(displayImage);
         _prefetchImageIfNeeded(displayImageForLoad);
+        final size = MediaQuery.of(context).size;
         final dpr = MediaQuery.of(context).devicePixelRatio;
         final imageHeight = size.width >= 900 ? 260.0 : 200.0;
         final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
         final cacheHeight = (imageHeight * dpr).round();
-        
-        final size = MediaQuery.of(context).size;
         return SizedBox(
           height: size.height * 0.9,
           width: double.infinity,
