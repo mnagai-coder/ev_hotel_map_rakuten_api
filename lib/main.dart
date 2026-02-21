@@ -284,6 +284,7 @@ class _MapScreenState extends State<MapScreen> {
 
         final bool shouldPreferRakuten = rakutenAppId != 'YOUR_RAKUTEN_APP_ID';
         String displayImage = shouldPreferRakuten ? "" : cleanText(hotel.csvImageUrl);
+        String imageSource = displayImage.isNotEmpty ? "CSV" : "";
         String displayPrice = "";
         String displayUrl = hotel.csvAffiliateUrl.isNotEmpty ? hotel.csvAffiliateUrl : hotel.csvSiteUrl;
         String? review;
@@ -291,7 +292,7 @@ class _MapScreenState extends State<MapScreen> {
         
         if (snapshot.connectionState == ConnectionState.done && snapshot.hasData && snapshot.data != null) { 
           final r = snapshot.data!; 
-          if (r.imageUrl != null && cleanText(r.imageUrl!) != "") displayImage = cleanText(r.imageUrl!); 
+          if (r.imageUrl != null && cleanText(r.imageUrl!) != "") { displayImage = cleanText(r.imageUrl!); imageSource = "Rakuten"; }
           if (r.minPrice != null) {
             final formatter = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
             final formattedPrice = r.minPrice.toString().replaceAllMapped(formatter, (Match m) => '${m[1]},');
@@ -301,7 +302,7 @@ class _MapScreenState extends State<MapScreen> {
           review = r.reviewAverage; 
           isRakuten = (r.minPrice != null); 
         } else if (snapshot.connectionState == ConnectionState.done && (snapshot.data == null || !snapshot.hasData)) {
-          if (displayImage.isEmpty) displayImage = cleanText(hotel.csvImageUrl);
+          if (displayImage.isEmpty) { displayImage = cleanText(hotel.csvImageUrl); imageSource = displayImage.isNotEmpty ? "CSV" : ""; }
         }
         
         String buttonText = "関連サイトを見る";
@@ -343,6 +344,7 @@ class _MapScreenState extends State<MapScreen> {
                   : Container(height: 200, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50)),
             ),
             Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
+            if (imageSource.isNotEmpty) Positioned(left: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)), child: Text("Image: $imageSource", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
             if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
           ]),
           Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
