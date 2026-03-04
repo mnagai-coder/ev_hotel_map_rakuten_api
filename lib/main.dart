@@ -945,7 +945,7 @@ class _MapScreenState extends State<MapScreen> {
                                               ClipRRect(
                                                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                                                 child: SizedBox(
-                                                  height: 140,
+                                                  height: 180,
                                                   width: double.infinity,
                                                   child: _hotelListImage(hotel, large: true),
                                                 ),
