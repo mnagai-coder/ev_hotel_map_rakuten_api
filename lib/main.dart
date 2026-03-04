@@ -381,6 +381,9 @@ class _MapScreenState extends State<MapScreen> {
   bool _hasBoundaryCandidate(String query) {
     if (!_boundaryIndexLoaded) return false;
     final q = _normalizeName(query);
+    if (q.isNotEmpty) {
+      setState(() { _boundaryStatus = "境界判定: ${q}"; });
+    }
     if (q.length < 2) return false;
     if (_prefCodeByName.containsKey(q)) return true;
     if (_muniByName.containsKey(q)) return true;
@@ -564,6 +567,7 @@ class _MapScreenState extends State<MapScreen> {
       return false;
     }
     final q = _normalizeName(query);
+    setState(() { _boundaryStatus = "境界検索: $q"; });
     if (_prefCodeByName.containsKey(q)) {
       final code = _prefCodeByName[q]!;
       await _showPrefBoundary(code, query);
@@ -594,7 +598,7 @@ class _MapScreenState extends State<MapScreen> {
       setState(() { _boundaryStatus = ""; });
       return true;
     }
-    setState(() { _boundaryStatus = "境界が見つかりません"; });
+    setState(() { _boundaryStatus = "境界が見つかりません: $q"; });
     return false;
   }
 
