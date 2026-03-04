@@ -726,9 +726,23 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _showHotelDetails(Hotel hotel) {
-    showDialog(context: context, barrierDismissible: true, builder: (context) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierColor: Colors.transparent,
+      builder: (context) {
       final Future<RakutenData?> rakutenFuture = _fetchRakutenData(hotel.name);
-      return Dialog(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), insetPadding: const EdgeInsets.all(16), child: PointerInterceptor(child: FutureBuilder<RakutenData?>(future: rakutenFuture, builder: (context, snapshot) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Center(
+          child: Material(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            child: PointerInterceptor(
+              child: FutureBuilder<RakutenData?>(
+                future: rakutenFuture,
+                builder: (context, snapshot) {
         
         String cleanText(String value) {
           final v = value.trim();
@@ -876,7 +890,11 @@ class _MapScreenState extends State<MapScreen> {
               ),
           ]),
         );
-      })));
+      }
+      ),
+    ),
+  ),
+);
     });
   }
 
