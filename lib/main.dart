@@ -435,27 +435,22 @@ class _MapScreenState extends State<MapScreen> {
     try { precacheImage(CachedNetworkImageProvider(url), context); } catch (_) {}
   }
 
-  Widget _hotelListImage(Hotel hotel) {
+  Widget _hotelListImage(Hotel hotel, {bool large = false}) {
     Widget buildImage(String url) {
       final img = url.isNotEmpty && url != "nan" ? _proxiedImageUrl(url) : "";
       if (img.isEmpty) {
         return Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)),
-          child: const Icon(Icons.hotel, size: 20, color: Colors.grey),
+          color: Colors.grey[200],
+          child: const Icon(Icons.hotel, size: 28, color: Colors.grey),
         );
       }
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: CachedNetworkImage(
-          imageUrl: img,
-          width: 48,
-          height: 48,
-          fit: BoxFit.cover,
-          placeholder: (context, url) => Container(width: 48, height: 48, color: Colors.grey[200]),
-          errorWidget: (context, url, error) => Container(width: 48, height: 48, color: Colors.grey[300], child: const Icon(Icons.hotel, size: 20, color: Colors.grey)),
-        ),
+      return CachedNetworkImage(
+        imageUrl: img,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        placeholder: (context, url) => Container(color: Colors.grey[200]),
+        errorWidget: (context, url, error) => Container(color: Colors.grey[300], child: const Icon(Icons.hotel, size: 28, color: Colors.grey)),
       );
     }
 
@@ -934,13 +929,42 @@ class _MapScreenState extends State<MapScreen> {
                                 child: ListView.builder(
                                   controller: controller,
                                   itemCount: _boundaryHotels.length,
+                                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                                   itemBuilder: (context, index) {
                                     final hotel = _boundaryHotels[index];
-                                    return ListTile(
-                                      leading: _hotelListImage(hotel),
-                                      title: Text(hotel.name),
-                                      subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      onTap: () => _goToHotel(hotel),
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: InkWell(
+                                        onTap: () => _goToHotel(hotel),
+                                        child: Card(
+                                          elevation: 2,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                                                child: SizedBox(
+                                                  height: 140,
+                                                  width: double.infinity,
+                                                  child: _hotelListImage(hotel, large: true),
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.all(12),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(hotel.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                    const SizedBox(height: 4),
+                                                    Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54)),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                     );
                                   },
                                 ),
