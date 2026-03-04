@@ -1173,7 +1173,7 @@ class _MapScreenState extends State<MapScreen> {
                     final cacheHeight = (imageHeight * dpr).round();
                     return SizedBox(
                       height: size.height * 0.9,
-                      width: isDesktop ? contentWidth : double.infinity,
+                      width: contentWidth,
                       child: Stack(children: [
                         Align(
                           alignment: Alignment.topCenter,
