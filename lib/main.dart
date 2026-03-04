@@ -384,7 +384,11 @@ class _MapScreenState extends State<MapScreen> {
 
   BoundaryPoly _polyFromRings(List rings) {
     List<LatLng> ringToLatLng(List ring) {
-      return ring.map<LatLng>((p) => LatLng(p[1] as num as double, p[0] as num as double)).toList();
+      return ring.map<LatLng>((p) {
+        final lat = (p[1] as num).toDouble();
+        final lng = (p[0] as num).toDouble();
+        return LatLng(lat, lng);
+      }).toList();
     }
     final outer = ringToLatLng(rings.first as List);
     final holes = <List<LatLng>>[];
