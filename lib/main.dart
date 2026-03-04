@@ -102,6 +102,7 @@ class _MapScreenState extends State<MapScreen> {
   Map<String, List<MuniRecord>> _muniByName = {};
   bool _boundaryIndexLoaded = false;
   String _boundaryStatus = "";
+  String _pendingBoundaryQuery = "";
   bool _boundaryActive = false;
   String _boundaryLabel = "";
   List<Hotel> _boundaryHotels = [];
@@ -120,6 +121,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _loadBoundaryIndex() async {
+    setState(() { _boundaryStatus = "境界データ読み込み中"; });
     try {
       final raw = await rootBundle.loadString('assets/boundaries/index.json');
       final data = json.decode(raw) as Map<String, dynamic>;
@@ -159,7 +161,13 @@ class _MapScreenState extends State<MapScreen> {
         _prefCodeByName = prefMap;
         _muniByName = muniMap;
         _boundaryIndexLoaded = true;
+        _boundaryStatus = "";
       });
+      if (_pendingBoundaryQuery.isNotEmpty) {
+        final q = _pendingBoundaryQuery;
+        _pendingBoundaryQuery = "";
+        await _tryBoundarySearch(q);
+      }
     } catch (e) {
       debugPrint("Boundary index load error: $e");
       setState(() { _boundaryStatus = "境界データ読み込み失敗"; });
@@ -377,10 +385,18 @@ class _MapScreenState extends State<MapScreen> {
     return false;
   }
 
+  bool _looksLikeBoundaryQuery(String query) {
+    return RegExp(r'(都|道|府|県|市|区|町|村)$').hasMatch(query.trim());
+  }
+
   void _onSearchChanged(String query) async {
     if (query.isEmpty) {
       setState(() { _isSearching = false; _searchResults = []; });
       return;
+    }
+    if (!_boundaryIndexLoaded && _looksLikeBoundaryQuery(query)) {
+      _pendingBoundaryQuery = query;
+      setState(() { _boundaryStatus = "境界データ読み込み中"; });
     }
     if (_hasBoundaryCandidate(query)) {
       if (await _tryBoundarySearch(query)) {
