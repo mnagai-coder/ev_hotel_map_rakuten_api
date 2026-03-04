@@ -50,6 +50,20 @@ class RakutenData {
   RakutenData({this.imageUrl, this.hotelUrl, this.minPrice, this.reviewAverage});
 }
 
+class MuniRecord {
+  final String code;
+  final String prefCode;
+  final String prefName;
+  final String name;
+  MuniRecord({required this.code, required this.prefCode, required this.prefName, required this.name});
+}
+
+class BoundaryPoly {
+  final List<LatLng> outer;
+  final List<List<LatLng>> holes;
+  BoundaryPoly({required this.outer, required this.holes});
+}
+
 class EvHotelApp extends StatelessWidget {
   const EvHotelApp({super.key});
   @override
@@ -83,14 +97,81 @@ class _MapScreenState extends State<MapScreen> {
   final Map<String, RakutenData?> _rakutenCache = {};
   final Set<String> _prefetchedImageUrls = {};
 
+  // Boundary search
+  Map<String, String> _prefCodeByName = {};
+  Map<String, List<MuniRecord>> _muniByName = {};
+  bool _boundaryActive = false;
+  String _boundaryLabel = "";
+  List<Hotel> _boundaryHotels = [];
+  Set<Polygon> _boundaryPolygons = {};
+  List<BoundaryPoly> _boundaryGeo = [];
+
   static const CameraPosition _kTokyoStation = CameraPosition(target: LatLng(35.681236, 139.767125), zoom: 8.0);
 
   @override
   void initState() {
     super.initState();
     _generateCustomIcons();
+    _loadBoundaryIndex();
     _loadCsvData();
     _determinePosition(silent: true);
+  }
+
+  Future<void> _loadBoundaryIndex() async {
+    try {
+      final raw = await rootBundle.loadString('assets/boundaries/index.json');
+      final data = json.decode(raw) as Map<String, dynamic>;
+      final prefs = (data['prefectures'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final munis = (data['municipalities'] as List<dynamic>).cast<Map<String, dynamic>>();
+
+      final prefMap = <String, String>{};
+      for (final p in prefs) {
+        final name = p['name']?.toString() ?? '';
+        final code = p['code']?.toString() ?? '';
+        if (name.isEmpty || code.isEmpty) continue;
+        prefMap[_normalizeName(name)] = code;
+        prefMap[_normalizeName(_stripPrefSuffix(name))] = code;
+      }
+
+      final muniMap = <String, List<MuniRecord>>{};
+      for (final m in munis) {
+        final name = m['name']?.toString() ?? '';
+        final code = m['code']?.toString() ?? '';
+        final prefCode = m['prefCode']?.toString() ?? '';
+        final prefName = m['pref']?.toString() ?? '';
+        if (name.isEmpty || code.isEmpty || prefCode.isEmpty) continue;
+        final rec = MuniRecord(code: code, prefCode: prefCode, prefName: prefName, name: name);
+        void addKey(String k) {
+          if (k.isEmpty) return;
+          muniMap.putIfAbsent(k, () => []).add(rec);
+        }
+        addKey(_normalizeName(name));
+        addKey(_normalizeName(_stripMuniSuffix(name)));
+        if (prefName.isNotEmpty) {
+          addKey(_normalizeName(prefName + name));
+          addKey(_normalizeName(_stripPrefSuffix(prefName) + name));
+        }
+      }
+
+      setState(() {
+        _prefCodeByName = prefMap;
+        _muniByName = muniMap;
+      });
+    } catch (e) {
+      debugPrint("Boundary index load error: $e");
+    }
+  }
+
+  String _normalizeName(String input) {
+    return input.replaceAll(RegExp(r'\\s+'), '').replaceAll('　', '').toLowerCase();
+  }
+
+  String _stripPrefSuffix(String name) {
+    return name.replaceAll(RegExp(r'(都|道|府|県)$'), '');
+  }
+
+  String _stripMuniSuffix(String name) {
+    return name.replaceAll(RegExp(r'(市|区|町|村)$'), '');
   }
 
   Future<void> _generateCustomIcons() async {
@@ -272,7 +353,12 @@ class _MapScreenState extends State<MapScreen> {
 
   void _applyFilter() { setState(() { if (_selectedFilter == 'すべて') { _filteredHotels = _allHotels; } else { _filteredHotels = _allHotels.where((hotel) { final target = "${hotel.evType} ${hotel.output} ${hotel.category}"; return target.contains(_selectedFilter); }).toList(); } _createMarkers(); }); }
   void _createMarkers() { setState(() { _hotelMarkers = _filteredHotels.map((hotel) { return Marker(markerId: MarkerId(hotel.name), position: LatLng(hotel.lat, hotel.lng), icon: _getIconForType(hotel.evType), onTap: () => _showHotelDetails(hotel)); }).toSet(); }); }
-  Future<void> _handleSearchSubmit(String query) async { if (_searchResults.isNotEmpty && _searchResults.length < 5) { _zoomToFitResults(); return; } await _searchPlaceAndMove(query); }
+  Future<void> _handleSearchSubmit(String query) async {
+    if (query.isEmpty) return;
+    if (await _tryBoundarySearch(query)) return;
+    if (_searchResults.isNotEmpty && _searchResults.length < 5) { _zoomToFitResults(); return; }
+    await _searchPlaceAndMove(query);
+  }
   Future<void> _goToHotel(Hotel hotel) async { FocusScope.of(context).unfocus(); final GoogleMapController controller = await _controller.future; if (!mounted) return; setState(() { _isSearching = false; _searchController.clear(); }); controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(hotel.lat, hotel.lng), zoom: 15))); _showHotelDetails(hotel); }
   Future<void> _zoomToFitResults() async { if (_searchResults.isEmpty) return; final GoogleMapController controller = await _controller.future; if (_searchResults.length == 1) { controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(_searchResults[0].lat, _searchResults[0].lng), zoom: 15))); return; } double minLat = _searchResults[0].lat; double maxLat = _searchResults[0].lat; double minLng = _searchResults[0].lng; double maxLng = _searchResults[0].lng; for (var hotel in _searchResults) { if (hotel.lat < minLat) minLat = hotel.lat; if (hotel.lat > maxLat) maxLat = hotel.lat; if (hotel.lng < minLng) minLng = hotel.lng; if (hotel.lng > maxLng) maxLng = hotel.lng; } controller.animateCamera(CameraUpdate.newLatLngBounds(LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)), 50.0)); }
   void _onSearchChanged(String query) { if (query.isEmpty) { setState(() { _isSearching = false; _searchResults = []; }); return; } setState(() { _isSearching = true; final lowerQuery = query.toLowerCase(); _searchResults = _filteredHotels.where((hotel) { final content = "${hotel.name} ${hotel.address} ${hotel.evType} ${hotel.notes} ${hotel.contact} ${hotel.category} ${hotel.manufacturer}".toLowerCase(); return content.contains(lowerQuery); }).toList(); }); }
@@ -282,6 +368,161 @@ class _MapScreenState extends State<MapScreen> {
     if (_prefetchedImageUrls.contains(url)) return;
     _prefetchedImageUrls.add(url);
     try { precacheImage(CachedNetworkImageProvider(url), context); } catch (_) {}
+  }
+
+  List<BoundaryPoly> _polysFromGeometry(Map geometry) {
+    final type = geometry['type']?.toString();
+    final coords = geometry['coordinates'];
+    if (type == 'Polygon' && coords is List) {
+      return [_polyFromRings(coords)];
+    }
+    if (type == 'MultiPolygon' && coords is List) {
+      return coords.map<BoundaryPoly>((rings) => _polyFromRings(rings as List)).toList();
+    }
+    return [];
+  }
+
+  BoundaryPoly _polyFromRings(List rings) {
+    List<LatLng> ringToLatLng(List ring) {
+      return ring.map<LatLng>((p) => LatLng(p[1] as num as double, p[0] as num as double)).toList();
+    }
+    final outer = ringToLatLng(rings.first as List);
+    final holes = <List<LatLng>>[];
+    for (var i = 1; i < rings.length; i++) {
+      holes.add(ringToLatLng(rings[i] as List));
+    }
+    return BoundaryPoly(outer: outer, holes: holes);
+  }
+
+  bool _pointInRing(LatLng p, List<LatLng> ring) {
+    bool inside = false;
+    for (int i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      final xi = ring[i].longitude, yi = ring[i].latitude;
+      final xj = ring[j].longitude, yj = ring[j].latitude;
+      final intersect = ((yi > p.latitude) != (yj > p.latitude)) &&
+          (p.longitude < (xj - xi) * (p.latitude - yi) / (yj - yi + 0.0) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  bool _pointInPoly(LatLng p, BoundaryPoly poly) {
+    if (!_pointInRing(p, poly.outer)) return false;
+    for (final h in poly.holes) {
+      if (_pointInRing(p, h)) return false;
+    }
+    return true;
+  }
+
+  LatLngBounds _boundsFromPolys(List<BoundaryPoly> polys) {
+    double? minLat, maxLat, minLng, maxLng;
+    for (final poly in polys) {
+      for (final p in poly.outer) {
+        minLat = minLat == null ? p.latitude : (p.latitude < minLat ? p.latitude : minLat);
+        maxLat = maxLat == null ? p.latitude : (p.latitude > maxLat ? p.latitude : maxLat);
+        minLng = minLng == null ? p.longitude : (p.longitude < minLng ? p.longitude : minLng);
+        maxLng = maxLng == null ? p.longitude : (p.longitude > maxLng ? p.longitude : maxLng);
+      }
+    }
+    return LatLngBounds(
+      southwest: LatLng(minLat ?? 0, minLng ?? 0),
+      northeast: LatLng(maxLat ?? 0, maxLng ?? 0),
+    );
+  }
+
+  Future<void> _showPrefBoundary(String prefCode, String label) async {
+    final raw = await rootBundle.loadString('assets/boundaries/pref/$prefCode.json');
+    final data = json.decode(raw) as Map<String, dynamic>;
+    final features = (data['features'] as List<dynamic>).cast<Map<String, dynamic>>();
+    final polys = <BoundaryPoly>[];
+    for (final f in features) {
+      final geometry = f['geometry'] as Map<String, dynamic>;
+      polys.addAll(_polysFromGeometry(geometry));
+    }
+    _applyBoundary(polys, label);
+  }
+
+  Future<void> _showMuniBoundary(MuniRecord record) async {
+    final raw = await rootBundle.loadString('assets/boundaries/muni/${record.prefCode}.json');
+    final data = json.decode(raw) as Map<String, dynamic>;
+    final features = (data['features'] as List<dynamic>).cast<Map<String, dynamic>>();
+    final polys = <BoundaryPoly>[];
+    for (final f in features) {
+      final props = f['properties'] as Map<String, dynamic>;
+      final city = props['N03_004']?.toString() ?? props['N03_003']?.toString() ?? props['N03_002']?.toString() ?? '';
+      final ward = props['N03_005']?.toString() ?? '';
+      final name = '$city$ward';
+      if (_normalizeName(name) != _normalizeName(record.name)) continue;
+      final geometry = f['geometry'] as Map<String, dynamic>;
+      polys.addAll(_polysFromGeometry(geometry));
+    }
+    _applyBoundary(polys, record.name);
+  }
+
+  void _applyBoundary(List<BoundaryPoly> polys, String label) async {
+    if (polys.isEmpty) return;
+    final boundaryHotels = <Hotel>[];
+    for (final h in _filteredHotels) {
+      final p = LatLng(h.lat, h.lng);
+      for (final poly in polys) {
+        if (_pointInPoly(p, poly)) {
+          boundaryHotels.add(h);
+          break;
+        }
+      }
+    }
+    final polygons = <Polygon>{};
+    for (var i = 0; i < polys.length; i++) {
+      final poly = polys[i];
+      polygons.add(Polygon(
+        polygonId: PolygonId('boundary_$i'),
+        strokeColor: Colors.red,
+        strokeWidth: 2,
+        fillColor: Colors.transparent,
+        points: poly.outer,
+        holes: poly.holes,
+      ));
+    }
+    setState(() {
+      _boundaryGeo = polys;
+      _boundaryPolygons = polygons;
+      _boundaryHotels = boundaryHotels;
+      _boundaryLabel = label;
+      _boundaryActive = true;
+    });
+    final controller = await _controller.future;
+    controller.animateCamera(CameraUpdate.newLatLngBounds(_boundsFromPolys(polys), 40));
+  }
+
+  Future<bool> _tryBoundarySearch(String query) async {
+    final q = _normalizeName(query);
+    if (_prefCodeByName.containsKey(q)) {
+      final code = _prefCodeByName[q]!;
+      await _showPrefBoundary(code, query);
+      return true;
+    }
+    // prefecture prefix match
+    for (final entry in _prefCodeByName.entries) {
+      if (q.startsWith(entry.key)) {
+        final remain = q.substring(entry.key.length);
+        if (remain.isEmpty) {
+          await _showPrefBoundary(entry.value, query);
+          return true;
+        }
+        final list = _muniByName[remain];
+        if (list != null && list.isNotEmpty) {
+          final rec = list.firstWhere((r) => r.prefCode == entry.value, orElse: () => list.first);
+          await _showMuniBoundary(rec);
+          return true;
+        }
+      }
+    }
+    final list = _muniByName[q];
+    if (list != null && list.isNotEmpty) {
+      await _showMuniBoundary(list.first);
+      return true;
+    }
+    return false;
   }
 
   String _proxiedImageUrl(String url) {
@@ -492,12 +733,72 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(children: [
-        GoogleMap(mapType: MapType.normal, initialCameraPosition: _kTokyoStation, markers: _hotelMarkers.union(_userMarker != null ? {_userMarker!} : {}), polylines: _routePolylines, myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onMapCreated: (GoogleMapController controller) { _controller.complete(controller); }),
+        GoogleMap(mapType: MapType.normal, initialCameraPosition: _kTokyoStation, markers: _hotelMarkers.union(_userMarker != null ? {_userMarker!} : {}), polylines: _routePolylines, polygons: _boundaryPolygons, myLocationEnabled: true, myLocationButtonEnabled: false, zoomControlsEnabled: false, onMapCreated: (GoogleMapController controller) { _controller.complete(controller); }),
         SafeArea(child: Column(children: [
           Padding(padding: const EdgeInsets.fromLTRB(12, 12, 12, 0), child: Card(elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)), child: TextField(controller: _searchController, textInputAction: TextInputAction.search, onSubmitted: (value) { _handleSearchSubmit(value); }, decoration: const InputDecoration(hintText: "場所（新宿駅）、ホテル名、充電タイプ", prefixIcon: Icon(Icons.search), border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 15)), onChanged: _onSearchChanged))),
           SingleChildScrollView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [_buildFilterChip('すべて'), _buildFilterChip('急速'), _buildFilterChip('普通'), _buildFilterChip('6kW'), _buildFilterChip('テスラ')])),
           if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
         ])),
+        if (_boundaryActive)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: DraggableScrollableSheet(
+              initialChildSize: 0.2,
+              minChildSize: 0.12,
+              maxChildSize: 0.6,
+              builder: (context, controller) {
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
+                  ),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 8),
+                      Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(2))),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text("${_boundaryLabel} のホテル", style: const TextStyle(fontWeight: FontWeight.bold))),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
+                                setState(() {
+                                  _boundaryActive = false;
+                                  _boundaryPolygons = {};
+                                  _boundaryHotels = [];
+                                  _boundaryGeo = [];
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: controller,
+                          itemCount: _boundaryHotels.length,
+                          itemBuilder: (context, index) {
+                            final hotel = _boundaryHotels[index];
+                            return ListTile(
+                              title: Text(hotel.name),
+                              subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis),
+                              onTap: () => _goToHotel(hotel),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
       ]),
     );
