@@ -882,102 +882,98 @@ class _MapScreenState extends State<MapScreen> {
           if (_isSearching && _searchResults.isNotEmpty) PointerInterceptor(child: Container(margin: const EdgeInsets.symmetric(horizontal: 12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)]), constraints: const BoxConstraints(maxHeight: 250), child: ListView.separated(padding: EdgeInsets.zero, shrinkWrap: true, itemCount: _searchResults.length, separatorBuilder: (_, __) => const Divider(height: 1), itemBuilder: (context, index) { final hotel = _searchResults[index]; return ListTile(title: Text(hotel.name), subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis), onTap: () => _goToHotel(hotel)); }))),
         ])),
         if (_boundaryActive)
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth >= 900;
-              if (isDesktop) {
-                final panelWidth = constraints.maxWidth * 0.25;
-                return Positioned(
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: panelWidth,
-                  child: PointerInterceptor(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
-                      ),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 8),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                            child: Row(
-                              children: [
-                                Expanded(child: Text("${_boundaryLabel} のホテル", style: const TextStyle(fontWeight: FontWeight.bold))),
-                                IconButton(
-                                  icon: const Icon(Icons.close),
-                                  onPressed: () {
-                                    setState(() {
-                                      _boundaryActive = false;
-                                      _boundaryPolygons = {};
-                                      _boundaryHotels = [];
-                                      _boundaryGeo = [];
-                                    });
-                                  },
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isDesktop = constraints.maxWidth >= 900;
+                if (isDesktop) {
+                  final panelWidth = constraints.maxWidth * 0.25;
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: panelWidth,
+                      child: PointerInterceptor(
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8)],
+                          ),
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 8),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                                child: Row(
+                                  children: [
+                                    Expanded(child: Text("${_boundaryLabel} のホテル", style: const TextStyle(fontWeight: FontWeight.bold))),
+                                    IconButton(
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () {
+                                        setState(() {
+                                          _boundaryActive = false;
+                                          _boundaryPolygons = {};
+                                          _boundaryHotels = [];
+                                          _boundaryGeo = [];
+                                        });
+                                      },
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                          const Divider(height: 1),
-                          Expanded(
-                            child: _boundaryHotels.isEmpty
-                                ? Center(child: Text(_boundaryStatus.isNotEmpty ? _boundaryStatus : "該当ホテルなし"))
-                                : ListView.builder(
-                                    itemCount: _boundaryHotels.length,
-                                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                                    itemBuilder: (context, index) {
-                                      final hotel = _boundaryHotels[index];
-                                      return Padding(
-                                        padding: const EdgeInsets.only(bottom: 12),
-                                        child: InkWell(
-                                          onTap: () => _goToHotel(hotel),
-                                          child: Card(
-                                            elevation: 2,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                ClipRRect(
-                                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                                  child: SizedBox(
-                                                    height: 180,
-                                                    width: double.infinity,
-                                                    child: _hotelListImage(hotel, large: true),
-                                                  ),
+                              ),
+                              const Divider(height: 1),
+                              Expanded(
+                                child: _boundaryHotels.isEmpty
+                                    ? Center(child: Text(_boundaryStatus.isNotEmpty ? _boundaryStatus : "該当ホテルなし"))
+                                    : ListView.builder(
+                                        itemCount: _boundaryHotels.length,
+                                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                                        itemBuilder: (context, index) {
+                                          final hotel = _boundaryHotels[index];
+                                          return Padding(
+                                            padding: const EdgeInsets.only(bottom: 12),
+                                            child: InkWell(
+                                              onTap: () => _goToHotel(hotel),
+                                              child: Card(
+                                                elevation: 2,
+                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    ClipRRect(
+                                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                                                      child: SizedBox(
+                                                        height: 180,
+                                                        width: double.infinity,
+                                                        child: _hotelListImage(hotel, large: true),
+                                                      ),
+                                                    ),
+                                                    Padding(
+                                                      padding: const EdgeInsets.all(12),
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(hotel.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                          const SizedBox(height: 4),
+                                                          Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54)),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                                Padding(
-                                                  padding: const EdgeInsets.all(12),
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(hotel.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                                      const SizedBox(height: 4),
-                                                      Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.black54)),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }
-              return Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                top: 0,
-                child: DraggableScrollableSheet(
+                  );
+                }
+                return DraggableScrollableSheet(
                   initialChildSize: 0.55,
                   minChildSize: 0.35,
                   maxChildSize: 0.8,
@@ -1064,9 +1060,9 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                     );
                   },
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
         Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), if (_boundaryStatus.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_boundaryStatus, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
       ]),
