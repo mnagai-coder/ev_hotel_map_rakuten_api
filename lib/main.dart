@@ -100,6 +100,8 @@ class _MapScreenState extends State<MapScreen> {
   // Boundary search
   Map<String, String> _prefCodeByName = {};
   Map<String, List<MuniRecord>> _muniByName = {};
+  bool _boundaryIndexLoaded = false;
+  String _boundaryStatus = "";
   bool _boundaryActive = false;
   String _boundaryLabel = "";
   List<Hotel> _boundaryHotels = [];
@@ -156,9 +158,11 @@ class _MapScreenState extends State<MapScreen> {
       setState(() {
         _prefCodeByName = prefMap;
         _muniByName = muniMap;
+        _boundaryIndexLoaded = true;
       });
     } catch (e) {
       debugPrint("Boundary index load error: $e");
+      setState(() { _boundaryStatus = "境界データ読み込み失敗"; });
     }
   }
 
@@ -362,6 +366,7 @@ class _MapScreenState extends State<MapScreen> {
   Future<void> _goToHotel(Hotel hotel) async { FocusScope.of(context).unfocus(); final GoogleMapController controller = await _controller.future; if (!mounted) return; setState(() { _isSearching = false; _searchController.clear(); }); controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(hotel.lat, hotel.lng), zoom: 15))); _showHotelDetails(hotel); }
   Future<void> _zoomToFitResults() async { if (_searchResults.isEmpty) return; final GoogleMapController controller = await _controller.future; if (_searchResults.length == 1) { controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(_searchResults[0].lat, _searchResults[0].lng), zoom: 15))); return; } double minLat = _searchResults[0].lat; double maxLat = _searchResults[0].lat; double minLng = _searchResults[0].lng; double maxLng = _searchResults[0].lng; for (var hotel in _searchResults) { if (hotel.lat < minLat) minLat = hotel.lat; if (hotel.lat > maxLat) maxLat = hotel.lat; if (hotel.lng < minLng) minLng = hotel.lng; if (hotel.lng > maxLng) maxLng = hotel.lng; } controller.animateCamera(CameraUpdate.newLatLngBounds(LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)), 50.0)); }
   bool _hasBoundaryCandidate(String query) {
+    if (!_boundaryIndexLoaded) return false;
     final q = _normalizeName(query);
     if (q.length < 2) return false;
     if (_prefCodeByName.containsKey(q)) return true;
@@ -529,10 +534,15 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<bool> _tryBoundarySearch(String query) async {
+    if (!_boundaryIndexLoaded) {
+      setState(() { _boundaryStatus = "境界データ読み込み中"; });
+      return false;
+    }
     final q = _normalizeName(query);
     if (_prefCodeByName.containsKey(q)) {
       final code = _prefCodeByName[q]!;
       await _showPrefBoundary(code, query);
+      setState(() { _boundaryStatus = ""; });
       return true;
     }
     // prefecture prefix match
@@ -541,12 +551,14 @@ class _MapScreenState extends State<MapScreen> {
         final remain = q.substring(entry.key.length);
         if (remain.isEmpty) {
           await _showPrefBoundary(entry.value, query);
+          setState(() { _boundaryStatus = ""; });
           return true;
         }
         final list = _muniByName[remain];
         if (list != null && list.isNotEmpty) {
           final rec = list.firstWhere((r) => r.prefCode == entry.value, orElse: () => list.first);
           await _showMuniBoundary(rec);
+          setState(() { _boundaryStatus = ""; });
           return true;
         }
       }
@@ -554,8 +566,10 @@ class _MapScreenState extends State<MapScreen> {
     final list = _muniByName[q];
     if (list != null && list.isNotEmpty) {
       await _showMuniBoundary(list.first);
+      setState(() { _boundaryStatus = ""; });
       return true;
     }
+    setState(() { _boundaryStatus = "境界が見つかりません"; });
     return false;
   }
 
@@ -833,7 +847,7 @@ class _MapScreenState extends State<MapScreen> {
               },
             ),
           ),
-        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
+        Positioned(bottom: 30, right: 20, child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [if (_statusMessage.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_statusMessage, style: const TextStyle(fontSize: 10))), if (_boundaryStatus.isNotEmpty) Container(padding: const EdgeInsets.all(8), color: Colors.white70, child: Text(_boundaryStatus, style: const TextStyle(fontSize: 10))), const SizedBox(height: 8), FloatingActionButton(backgroundColor: Colors.blue, child: const Icon(Icons.my_location, color: Colors.white), onPressed: () { _determinePosition(); })])),
       ]),
     );
   }
