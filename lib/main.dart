@@ -161,7 +161,7 @@ class _MapScreenState extends State<MapScreen> {
         _prefCodeByName = prefMap;
         _muniByName = muniMap;
         _boundaryIndexLoaded = true;
-        _boundaryStatus = "";
+        _boundaryStatus = "境界データ読み込み完了";
       });
       if (_pendingBoundaryQuery.isNotEmpty) {
         final q = _pendingBoundaryQuery;
@@ -367,6 +367,11 @@ class _MapScreenState extends State<MapScreen> {
   void _createMarkers() { setState(() { _hotelMarkers = _filteredHotels.map((hotel) { return Marker(markerId: MarkerId(hotel.name), position: LatLng(hotel.lat, hotel.lng), icon: _getIconForType(hotel.evType), onTap: () => _showHotelDetails(hotel)); }).toSet(); }); }
   Future<void> _handleSearchSubmit(String query) async {
     if (query.isEmpty) return;
+    if (!_boundaryIndexLoaded && _looksLikeBoundaryQuery(query)) {
+      _pendingBoundaryQuery = query;
+      setState(() { _boundaryStatus = "境界データ読み込み中"; _isSearching = false; _searchResults = []; });
+      return;
+    }
     if (await _tryBoundarySearch(query)) return;
     if (_searchResults.isNotEmpty && _searchResults.length < 5) { _zoomToFitResults(); return; }
     await _searchPlaceAndMove(query);
@@ -403,6 +408,10 @@ class _MapScreenState extends State<MapScreen> {
         setState(() { _isSearching = false; _searchResults = []; });
         return;
       }
+    }
+    if (_looksLikeBoundaryQuery(query)) {
+      setState(() { _isSearching = false; _searchResults = []; });
+      return;
     }
     setState(() {
       _isSearching = true;
