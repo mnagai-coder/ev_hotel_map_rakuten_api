@@ -585,6 +585,8 @@ class _MapScreenState extends State<MapScreen> {
         _boundaryStatus = "";
       });
     });
+    if (!mounted) return;
+    setState(() { _boundaryActive = true; });
     final controller = await _controller.future;
     controller.animateCamera(CameraUpdate.newLatLngBounds(_boundsFromPolys(polys), 40));
   }
