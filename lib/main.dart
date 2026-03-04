@@ -424,10 +424,10 @@ class _MapScreenState extends State<MapScreen> {
                 if (imageSource.isNotEmpty) Positioned(left: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)), child: Text("Image: $imageSource", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
                 if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
               ]),
-              Expanded(child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 90), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), Text(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
-                const SizedBox(height: 4), Text(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
+              Expanded(child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 90), child: SelectionArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SelectableText(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), SelectableText(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
+                const SizedBox(height: 4), SelectableText(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
                 SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async {
                   if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください'))); return; }
                   if (kIsWeb) {
@@ -443,13 +443,13 @@ class _MapScreenState extends State<MapScreen> {
                   }
                 })),
                 const SizedBox(height: 16),
-                if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: Text("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
+                if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: SelectableText("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
                 if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), Text(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
                 const Divider(height: 10), 
                 sectionTitle("⚡ EV充電スペック"), infoRow("タイプ", hotel.evType), infoRow("出力", hotel.output), infoRow("台数", hotel.chargerCount), infoRow("種別", hotel.category), infoRow("最大電流", hotel.maxCurrent), infoRow("メーカー", hotel.manufacturer),
                 sectionTitle("🅿️ 利用・料金"), infoRow("充電課金", hotel.chargingFee), infoRow("駐車料金", hotel.parkingFee), infoRow("連絡・申込", hotel.contact), infoRow("事前予約", hotel.reservation),
                 if (hotel.notes.isNotEmpty && hotel.notes != "nan") ...[sectionTitle("📝 備考"), Container(width: double.infinity, padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Text(hotel.notes, style: const TextStyle(fontSize: 13, height: 1.4)))],
-              ]))),
+              ])))),
             ]),
             if (displayUrl.isNotEmpty && displayUrl != "nan")
               Positioned(
