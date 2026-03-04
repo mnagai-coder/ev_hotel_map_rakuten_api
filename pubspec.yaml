@@ -28,3 +28,5 @@ flutter:
   assets:
     - assets/ev_hotels.csv
     - assets/boundaries/
+    - assets/boundaries/pref/
+    - assets/boundaries/muni/
