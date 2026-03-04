@@ -1162,11 +1162,12 @@ class _MapScreenState extends State<MapScreen> {
                     final isDesktop = size.width >= 900;
                     final imageHeight = isDesktop ? 420.0 : 200.0;
                     final imageFit = isDesktop ? BoxFit.contain : BoxFit.cover;
+                    final mobileSidePadding = 20.0; // ~0.5cm each side
                     final imageWidth = isDesktop
                         ? (size.width * 0.6).clamp(520.0, 900.0)
-                        : size.width;
-                    final contentWidth =
-                        isDesktop ? imageWidth : double.infinity;
+                        : (size.width - (mobileSidePadding * 2))
+                            .clamp(0.0, size.width);
+                    final contentWidth = isDesktop ? imageWidth : imageWidth;
                     final cacheWidth =
                         (MediaQuery.of(context).size.width * dpr).round();
                     final cacheHeight = (imageHeight * dpr).round();
