@@ -768,7 +768,8 @@ class _MapScreenState extends State<MapScreen> {
         _prefetchImageIfNeeded(displayImageForLoad);
         final size = MediaQuery.of(context).size;
         final dpr = MediaQuery.of(context).devicePixelRatio;
-        final imageHeight = size.width >= 900 ? 320.0 : 200.0;
+        final imageHeight = size.width >= 900 ? 420.0 : 200.0;
+        final imageFit = size.width >= 900 ? BoxFit.contain : BoxFit.cover;
         final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
         final cacheHeight = (imageHeight * dpr).round();
         return SizedBox(
@@ -784,7 +785,7 @@ class _MapScreenState extends State<MapScreen> {
                           imageUrl: displayImageForLoad,
                           height: imageHeight,
                           width: double.infinity,
-                          fit: BoxFit.cover,
+                          fit: imageFit,
                           memCacheWidth: cacheWidth,
                           memCacheHeight: cacheHeight,
                           maxWidthDiskCache: cacheWidth,
@@ -796,7 +797,7 @@ class _MapScreenState extends State<MapScreen> {
                             image: provider,
                             height: imageHeight,
                             width: double.infinity,
-                            fit: BoxFit.cover,
+                            fit: imageFit,
                             filterQuality: FilterQuality.high,
                           ),
                           errorWidget: (context, url, error) => Container(height: imageHeight, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey)),
