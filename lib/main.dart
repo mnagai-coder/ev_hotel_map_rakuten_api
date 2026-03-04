@@ -895,31 +895,33 @@ class _MapScreenState extends State<MapScreen> {
                       Expanded(
                         child: _boundaryHotels.isEmpty
                             ? Center(child: Text(_boundaryStatus.isNotEmpty ? _boundaryStatus : "該当ホテルなし"))
-                            : ListView.builder(
-                                controller: controller,
-                                itemCount: _boundaryHotels.length,
-                                itemBuilder: (context, index) {
-                                  final hotel = _boundaryHotels[index];
-                                  final img = hotel.csvImageUrl.isNotEmpty && hotel.csvImageUrl != "nan" ? _proxiedImageUrl(hotel.csvImageUrl) : "";
-                                  return ListTile(
-                                    leading: img.isNotEmpty
-                                        ? ClipRRect(
-                                            borderRadius: BorderRadius.circular(6),
-                                            child: CachedNetworkImage(
-                                              imageUrl: img,
-                                              width: 48,
-                                              height: 48,
-                                              fit: BoxFit.cover,
-                                              placeholder: (context, url) => Container(width: 48, height: 48, color: Colors.grey[200]),
-                                              errorWidget: (context, url, error) => Container(width: 48, height: 48, color: Colors.grey[300], child: const Icon(Icons.hotel, size: 20, color: Colors.grey)),
-                                            ),
-                                          )
-                                        : Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)), child: const Icon(Icons.hotel, size: 20, color: Colors.grey)),
-                                    title: Text(hotel.name),
-                                    subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                    onTap: () => _goToHotel(hotel),
-                                  );
-                                },
+                            : PointerInterceptor(
+                                child: ListView.builder(
+                                  controller: controller,
+                                  itemCount: _boundaryHotels.length,
+                                  itemBuilder: (context, index) {
+                                    final hotel = _boundaryHotels[index];
+                                    final img = hotel.csvImageUrl.isNotEmpty && hotel.csvImageUrl != "nan" ? _proxiedImageUrl(hotel.csvImageUrl) : "";
+                                    return ListTile(
+                                      leading: img.isNotEmpty
+                                          ? ClipRRect(
+                                              borderRadius: BorderRadius.circular(6),
+                                              child: CachedNetworkImage(
+                                                imageUrl: img,
+                                                width: 48,
+                                                height: 48,
+                                                fit: BoxFit.cover,
+                                                placeholder: (context, url) => Container(width: 48, height: 48, color: Colors.grey[200]),
+                                                errorWidget: (context, url, error) => Container(width: 48, height: 48, color: Colors.grey[300], child: const Icon(Icons.hotel, size: 20, color: Colors.grey)),
+                                              ),
+                                            )
+                                          : Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)), child: const Icon(Icons.hotel, size: 20, color: Colors.grey)),
+                                      title: Text(hotel.name),
+                                      subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      onTap: () => _goToHotel(hotel),
+                                    );
+                                  },
+                                ),
                               ),
                       ),
                     ],
