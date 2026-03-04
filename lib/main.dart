@@ -768,94 +768,107 @@ class _MapScreenState extends State<MapScreen> {
         _prefetchImageIfNeeded(displayImageForLoad);
         final size = MediaQuery.of(context).size;
         final dpr = MediaQuery.of(context).devicePixelRatio;
-        final imageHeight = size.width >= 900 ? 420.0 : 200.0;
-        final imageFit = size.width >= 900 ? BoxFit.contain : BoxFit.cover;
+        final isDesktop = size.width >= 900;
+        final imageHeight = isDesktop ? 420.0 : 200.0;
+        final imageFit = isDesktop ? BoxFit.contain : BoxFit.cover;
+        final imageWidth = isDesktop ? (size.width * 0.6).clamp(520.0, 900.0) : size.width;
+        final contentWidth = isDesktop ? imageWidth : double.infinity;
         final cacheWidth = (MediaQuery.of(context).size.width * dpr).round();
         final cacheHeight = (imageHeight * dpr).round();
         return SizedBox(
           height: size.height * 0.9,
           width: double.infinity,
           child: Stack(children: [
-            Column(children: [
-              Stack(alignment: Alignment.topRight, children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  child: displayImageForLoad.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: displayImageForLoad,
-                          height: imageHeight,
-                          width: double.infinity,
-                          fit: imageFit,
-                          memCacheWidth: cacheWidth,
-                          memCacheHeight: cacheHeight,
-                          maxWidthDiskCache: cacheWidth,
-                          maxHeightDiskCache: cacheHeight,
-                          fadeInDuration: const Duration(milliseconds: 120),
-                          useOldImageOnUrlChange: true,
-                          placeholder: (context, url) => Container(height: imageHeight, color: Colors.grey[200]),
-                          imageBuilder: (context, provider) => Image(
-                            image: provider,
-                            height: imageHeight,
-                            width: double.infinity,
-                            fit: imageFit,
-                            filterQuality: FilterQuality.high,
-                          ),
-                          errorWidget: (context, url, error) => Container(height: imageHeight, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey)),
-                        )
-                      : Container(height: imageHeight, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50)),
-                ),
-                Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
-                if (imageSource.isNotEmpty) Positioned(left: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)), child: Text("Image: $imageSource", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
-                if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
-              ]),
-              Expanded(child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 90), child: SelectionArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                SelectableText(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), SelectableText(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
-                const SizedBox(height: 4), SelectableText(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
-                SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async {
-                  if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください'))); return; }
-                  if (kIsWeb) {
-                    final embedUrl = _buildEmbedMapUrl(hotel);
-                    if (embedUrl.isNotEmpty) { await _openUrlInApp("ルート案内", embedUrl); }
-                  } else {
-                    final origin = _userMarker != null ? "${_userMarker!.position.latitude},${_userMarker!.position.longitude}" : "";
-                    final String url = origin.isNotEmpty
-                        ? "https://www.google.com/maps/dir/?api=1&origin=$origin&destination=${hotel.lat},${hotel.lng}"
-                        : "https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}";
-                    final Uri uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) { await launchUrl(uri, mode: LaunchMode.inAppWebView); }
-                  }
-                })),
-                const SizedBox(height: 16),
-                if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: SelectableText("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
-                if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), SelectableText(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
-                const Divider(height: 10), 
-                sectionTitle("⚡ EV充電スペック"), infoRow("タイプ", hotel.evType), infoRow("出力", hotel.output), infoRow("台数", hotel.chargerCount), infoRow("種別", hotel.category), infoRow("最大電流", hotel.maxCurrent), infoRow("メーカー", hotel.manufacturer),
-                sectionTitle("🅿️ 利用・料金"), infoRow("充電課金", hotel.chargingFee), infoRow("駐車料金", hotel.parkingFee), infoRow("連絡・申込", hotel.contact), infoRow("事前予約", hotel.reservation),
-                if (hotel.notes.isNotEmpty && hotel.notes != "nan") ...[sectionTitle("📝 備考"), Container(width: double.infinity, padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: SelectableText(hotel.notes, style: const TextStyle(fontSize: 13, height: 1.4)))],
-              ])))),
-            ]),
+            Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: contentWidth,
+                child: Column(children: [
+                  Stack(alignment: Alignment.topRight, children: [
+                    SizedBox(
+                      width: imageWidth,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        child: displayImageForLoad.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: displayImageForLoad,
+                                height: imageHeight,
+                                width: imageWidth,
+                                fit: imageFit,
+                                memCacheWidth: cacheWidth,
+                                memCacheHeight: cacheHeight,
+                                maxWidthDiskCache: cacheWidth,
+                                maxHeightDiskCache: cacheHeight,
+                                fadeInDuration: const Duration(milliseconds: 120),
+                                useOldImageOnUrlChange: true,
+                                placeholder: (context, url) => Container(height: imageHeight, color: Colors.grey[200]),
+                                imageBuilder: (context, provider) => Image(
+                                  image: provider,
+                                  height: imageHeight,
+                                  width: imageWidth,
+                                  fit: imageFit,
+                                  filterQuality: FilterQuality.high,
+                                ),
+                                errorWidget: (context, url, error) => Container(height: imageHeight, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey)),
+                              )
+                            : Container(height: imageHeight, color: Colors.grey[300], child: const Icon(Icons.hotel, color: Colors.grey, size: 50)),
+                      ),
+                    ),
+                    Padding(padding: const EdgeInsets.all(8.0), child: CircleAvatar(backgroundColor: Colors.white, radius: 20, child: IconButton(icon: const Icon(Icons.close, color: Colors.black), onPressed: () => Navigator.of(context).pop()))),
+                    if (imageSource.isNotEmpty) Positioned(left: 10, bottom: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)), child: Text("Image: $imageSource", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
+                    if (isRakuten) Positioned(bottom: 10, right: 10, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)), child: const Text("Rakuten Travel", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)))),
+                  ]),
+                  Expanded(child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(20, 20, 20, 90), child: SelectionArea(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    SelectableText(hotel.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    if (review != null) ...[const SizedBox(height: 4), Row(children: [const Icon(Icons.star, color: Colors.amber, size: 18), SelectableText(" $review", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))])],
+                    const SizedBox(height: 4), SelectableText(hotel.address, style: const TextStyle(color: Colors.grey)), const SizedBox(height: 16),
+                    SizedBox(width: double.infinity, height: 45, child: ElevatedButton.icon(style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[600], foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))), icon: const Icon(Icons.directions_car), label: const Text("アプリ内でルート案内", style: TextStyle(fontWeight: FontWeight.bold)), onPressed: () async {
+                      if (googleMapsApiKey == 'YOUR_GOOGLE_API_KEY') { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google APIキーを設定してください'))); return; }
+                      if (kIsWeb) {
+                        final embedUrl = _buildEmbedMapUrl(hotel);
+                        if (embedUrl.isNotEmpty) { await _openUrlInApp("ルート案内", embedUrl); }
+                      } else {
+                        final origin = _userMarker != null ? "${_userMarker!.position.latitude},${_userMarker!.position.longitude}" : "";
+                        final String url = origin.isNotEmpty
+                            ? "https://www.google.com/maps/dir/?api=1&origin=$origin&destination=${hotel.lat},${hotel.lng}"
+                            : "https://www.google.com/maps/dir/?api=1&destination=${hotel.lat},${hotel.lng}";
+                        final Uri uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) { await launchUrl(uri, mode: LaunchMode.inAppWebView); }
+                      }
+                    })),
+                    const SizedBox(height: 16),
+                    if (displayPrice.isNotEmpty && displayPrice != "nan") Padding(padding: const EdgeInsets.only(bottom: 16.0), child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade200)), child: SelectableText("目安: $displayPrice", style: TextStyle(color: Colors.orange[800], fontWeight: FontWeight.bold)))),
+                    if (hotel.csvSiteUrl.isNotEmpty && hotel.csvSiteUrl != "nan") Padding(padding: const EdgeInsets.only(bottom: 8.0), child: InkWell(onTap: () async { final Uri url = Uri.parse(hotel.csvSiteUrl); if (await canLaunchUrl(url)) await launchUrl(url); }, child: const Row(children: [Icon(Icons.link, color: Colors.blue, size: 18), SelectableText(" ホテル公式サイト / 関連ページ", style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline))]))),
+                    const Divider(height: 10), 
+                    sectionTitle("⚡ EV充電スペック"), infoRow("タイプ", hotel.evType), infoRow("出力", hotel.output), infoRow("台数", hotel.chargerCount), infoRow("種別", hotel.category), infoRow("最大電流", hotel.maxCurrent), infoRow("メーカー", hotel.manufacturer),
+                    sectionTitle("🅿️ 利用・料金"), infoRow("充電課金", hotel.chargingFee), infoRow("駐車料金", hotel.parkingFee), infoRow("連絡・申込", hotel.contact), infoRow("事前予約", hotel.reservation),
+                    if (hotel.notes.isNotEmpty && hotel.notes != "nan") ...[sectionTitle("📝 備考"), Container(width: double.infinity, padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: SelectableText(hotel.notes, style: const TextStyle(fontSize: 13, height: 1.4)))],
+                  ])))),
+                ]),
+              ),
+            ),
             if (displayUrl.isNotEmpty && displayUrl != "nan")
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
+              Align(
+                alignment: Alignment.bottomCenter,
                 child: SafeArea(
                   top: false,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))],
-                    ),
-                    child: SizedBox(
+                  child: SizedBox(
+                    width: contentWidth,
+                    child: Container(
                       width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white, elevation: 5, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                        onPressed: () async { await _openUrlInApp(buttonText, displayUrl); },
-                        child: Text(buttonText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, -2))],
+                      ),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700], foregroundColor: Colors.white, elevation: 5, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                          onPressed: () async { await _openUrlInApp(buttonText, displayUrl); },
+                          child: Text(buttonText, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
                       ),
                     ),
                   ),
