@@ -402,19 +402,21 @@ class _MapScreenState extends State<MapScreen> {
       setState(() { _isSearching = false; _searchResults = []; });
       return;
     }
-    if (!_boundaryIndexLoaded && _looksLikeBoundaryQuery(query)) {
-      _pendingBoundaryQuery = query;
-      setState(() { _boundaryStatus = "境界データ読み込み中"; });
+    if (_looksLikeBoundaryQuery(query)) {
+      setState(() { _isSearching = false; _searchResults = []; });
+      if (!_boundaryIndexLoaded) {
+        _pendingBoundaryQuery = query;
+        setState(() { _boundaryStatus = "境界データ読み込み中"; });
+        return;
+      }
+      await _tryBoundarySearch(query);
+      return;
     }
     if (_hasBoundaryCandidate(query)) {
       if (await _tryBoundarySearch(query)) {
         setState(() { _isSearching = false; _searchResults = []; });
         return;
       }
-    }
-    if (_looksLikeBoundaryQuery(query)) {
-      setState(() { _isSearching = false; _searchResults = []; });
-      return;
     }
     setState(() {
       _isSearching = true;
@@ -568,25 +570,26 @@ class _MapScreenState extends State<MapScreen> {
     }
     final q = _normalizeName(query);
     setState(() { _boundaryStatus = "境界検索: $q"; });
-    if (_prefCodeByName.containsKey(q)) {
-      final code = _prefCodeByName[q]!;
-      await _showPrefBoundary(code, query);
-      setState(() { _boundaryStatus = ""; });
-      return true;
-    }
+    try {
+      if (_prefCodeByName.containsKey(q)) {
+        final code = _prefCodeByName[q]!;
+        await _showPrefBoundary(code, query).timeout(const Duration(seconds: 6));
+        setState(() { _boundaryStatus = ""; });
+        return true;
+      }
     // prefecture prefix match
     for (final entry in _prefCodeByName.entries) {
       if (q.startsWith(entry.key)) {
         final remain = q.substring(entry.key.length);
         if (remain.isEmpty) {
-          await _showPrefBoundary(entry.value, query);
+          await _showPrefBoundary(entry.value, query).timeout(const Duration(seconds: 6));
           setState(() { _boundaryStatus = ""; });
           return true;
         }
         final list = _muniByName[remain];
         if (list != null && list.isNotEmpty) {
           final rec = list.firstWhere((r) => r.prefCode == entry.value, orElse: () => list.first);
-          await _showMuniBoundary(rec);
+          await _showMuniBoundary(rec).timeout(const Duration(seconds: 6));
           setState(() { _boundaryStatus = ""; });
           return true;
         }
@@ -594,9 +597,13 @@ class _MapScreenState extends State<MapScreen> {
     }
     final list = _muniByName[q];
     if (list != null && list.isNotEmpty) {
-      await _showMuniBoundary(list.first);
+      await _showMuniBoundary(list.first).timeout(const Duration(seconds: 6));
       setState(() { _boundaryStatus = ""; });
       return true;
+    }
+    } catch (e) {
+      setState(() { _boundaryStatus = "境界読み込み失敗"; });
+      return false;
     }
     setState(() { _boundaryStatus = "境界が見つかりません: $q"; });
     return false;
