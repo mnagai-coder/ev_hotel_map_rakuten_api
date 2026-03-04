@@ -500,32 +500,46 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> _showPrefBoundary(String prefCode, String label) async {
-    final raw = await rootBundle.loadString('assets/boundaries/pref/$prefCode.json');
-    final data = json.decode(raw) as Map<String, dynamic>;
-    final features = (data['features'] as List<dynamic>).cast<Map<String, dynamic>>();
-    final polys = <BoundaryPoly>[];
-    for (final f in features) {
-      final geometry = f['geometry'] as Map<String, dynamic>;
-      polys.addAll(_polysFromGeometry(geometry));
+    setState(() { _boundaryStatus = "境界読み込み: $prefCode"; });
+    try {
+      final raw = await rootBundle.loadString('assets/boundaries/pref/$prefCode.json');
+      final data = json.decode(raw) as Map<String, dynamic>;
+      final features = (data['features'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final polys = <BoundaryPoly>[];
+      for (final f in features) {
+        final geometry = f['geometry'] as Map<String, dynamic>;
+        polys.addAll(_polysFromGeometry(geometry));
+      }
+      _applyBoundary(polys, label);
+    } catch (e) {
+      debugPrint("Pref boundary load error: $e");
+      setState(() { _boundaryStatus = "境界読み込み失敗(pref $prefCode)"; });
+      rethrow;
     }
-    _applyBoundary(polys, label);
   }
 
   Future<void> _showMuniBoundary(MuniRecord record) async {
-    final raw = await rootBundle.loadString('assets/boundaries/muni/${record.prefCode}.json');
-    final data = json.decode(raw) as Map<String, dynamic>;
-    final features = (data['features'] as List<dynamic>).cast<Map<String, dynamic>>();
-    final polys = <BoundaryPoly>[];
-    for (final f in features) {
-      final props = f['properties'] as Map<String, dynamic>;
-      final city = props['N03_004']?.toString() ?? props['N03_003']?.toString() ?? props['N03_002']?.toString() ?? '';
-      final ward = props['N03_005']?.toString() ?? '';
-      final name = '$city$ward';
-      if (_normalizeName(name) != _normalizeName(record.name)) continue;
-      final geometry = f['geometry'] as Map<String, dynamic>;
-      polys.addAll(_polysFromGeometry(geometry));
+    setState(() { _boundaryStatus = "境界読み込み: ${record.prefCode}"; });
+    try {
+      final raw = await rootBundle.loadString('assets/boundaries/muni/${record.prefCode}.json');
+      final data = json.decode(raw) as Map<String, dynamic>;
+      final features = (data['features'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final polys = <BoundaryPoly>[];
+      for (final f in features) {
+        final props = f['properties'] as Map<String, dynamic>;
+        final city = props['N03_004']?.toString() ?? props['N03_003']?.toString() ?? props['N03_002']?.toString() ?? '';
+        final ward = props['N03_005']?.toString() ?? '';
+        final name = '$city$ward';
+        if (_normalizeName(name) != _normalizeName(record.name)) continue;
+        final geometry = f['geometry'] as Map<String, dynamic>;
+        polys.addAll(_polysFromGeometry(geometry));
+      }
+      _applyBoundary(polys, record.name);
+    } catch (e) {
+      debugPrint("Muni boundary load error: $e");
+      setState(() { _boundaryStatus = "境界読み込み失敗(muni ${record.prefCode})"; });
+      rethrow;
     }
-    _applyBoundary(polys, record.name);
   }
 
   void _applyBoundary(List<BoundaryPoly> polys, String label) async {
