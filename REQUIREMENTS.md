@@ -14,12 +14,15 @@
 - マーカータップで詳細ダイアログを表示する。
 - 楽天APIで画像/価格/レビュー/ホテルURLを取得し、失敗時はCSV情報でフォールバックする。
 - 外部API・画像取得をCloudflare Workersプロキシ経由で実行する。
+- 詳細ダイアログ内の「アプリ内でルート案内」は Google Maps Embed で表示する。
+- 予約ボタンは詳細ダイアログ下部に常時表示される（スマホ対応）。
 
 ## 環境要件
 - `lib/main.dart` の `googleMapsApiKey` を設定する。
 - `lib/main.dart` の `rakutenAppId` を設定する。
 - `lib/main.dart` の `myProxyUrl` を設定する（末尾スラッシュなし）。
 - Web利用時は `web/index.html` のGoogle Maps Web APIキーを設定する。
+- Google Maps Embed API を有効化する（ルート案内用）。
 
 ## 既知課題
 - APIキー/IDの安全な注入方式（環境変数化）が未整備。
