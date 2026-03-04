@@ -361,7 +361,37 @@ class _MapScreenState extends State<MapScreen> {
   }
   Future<void> _goToHotel(Hotel hotel) async { FocusScope.of(context).unfocus(); final GoogleMapController controller = await _controller.future; if (!mounted) return; setState(() { _isSearching = false; _searchController.clear(); }); controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(hotel.lat, hotel.lng), zoom: 15))); _showHotelDetails(hotel); }
   Future<void> _zoomToFitResults() async { if (_searchResults.isEmpty) return; final GoogleMapController controller = await _controller.future; if (_searchResults.length == 1) { controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(target: LatLng(_searchResults[0].lat, _searchResults[0].lng), zoom: 15))); return; } double minLat = _searchResults[0].lat; double maxLat = _searchResults[0].lat; double minLng = _searchResults[0].lng; double maxLng = _searchResults[0].lng; for (var hotel in _searchResults) { if (hotel.lat < minLat) minLat = hotel.lat; if (hotel.lat > maxLat) maxLat = hotel.lat; if (hotel.lng < minLng) minLng = hotel.lng; if (hotel.lng > maxLng) maxLng = hotel.lng; } controller.animateCamera(CameraUpdate.newLatLngBounds(LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)), 50.0)); }
-  void _onSearchChanged(String query) { if (query.isEmpty) { setState(() { _isSearching = false; _searchResults = []; }); return; } setState(() { _isSearching = true; final lowerQuery = query.toLowerCase(); _searchResults = _filteredHotels.where((hotel) { final content = "${hotel.name} ${hotel.address} ${hotel.evType} ${hotel.notes} ${hotel.contact} ${hotel.category} ${hotel.manufacturer}".toLowerCase(); return content.contains(lowerQuery); }).toList(); }); }
+  bool _hasBoundaryCandidate(String query) {
+    final q = _normalizeName(query);
+    if (q.length < 2) return false;
+    if (_prefCodeByName.containsKey(q)) return true;
+    if (_muniByName.containsKey(q)) return true;
+    for (final key in _prefCodeByName.keys) {
+      if (q.startsWith(key)) return true;
+    }
+    return false;
+  }
+
+  void _onSearchChanged(String query) async {
+    if (query.isEmpty) {
+      setState(() { _isSearching = false; _searchResults = []; });
+      return;
+    }
+    if (_hasBoundaryCandidate(query)) {
+      if (await _tryBoundarySearch(query)) {
+        setState(() { _isSearching = false; _searchResults = []; });
+        return;
+      }
+    }
+    setState(() {
+      _isSearching = true;
+      final lowerQuery = query.toLowerCase();
+      _searchResults = _filteredHotels.where((hotel) {
+        final content = "${hotel.name} ${hotel.address} ${hotel.evType} ${hotel.notes} ${hotel.contact} ${hotel.category} ${hotel.manufacturer}".toLowerCase();
+        return content.contains(lowerQuery);
+      }).toList();
+    });
+  }
 
   void _prefetchImageIfNeeded(String url) {
     if (url.isEmpty) return;
