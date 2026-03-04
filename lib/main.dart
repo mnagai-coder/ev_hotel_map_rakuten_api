@@ -544,16 +544,6 @@ class _MapScreenState extends State<MapScreen> {
 
   void _applyBoundary(List<BoundaryPoly> polys, String label) async {
     if (polys.isEmpty) return;
-    final boundaryHotels = <Hotel>[];
-    for (final h in _filteredHotels) {
-      final p = LatLng(h.lat, h.lng);
-      for (final poly in polys) {
-        if (_pointInPoly(p, poly)) {
-          boundaryHotels.add(h);
-          break;
-        }
-      }
-    }
     final polygons = <Polygon>{};
     for (var i = 0; i < polys.length; i++) {
       final poly = polys[i];
@@ -569,9 +559,31 @@ class _MapScreenState extends State<MapScreen> {
     setState(() {
       _boundaryGeo = polys;
       _boundaryPolygons = polygons;
-      _boundaryHotels = boundaryHotels;
+      _boundaryHotels = [];
       _boundaryLabel = label;
       _boundaryActive = true;
+      _boundaryStatus = "ホテル抽出中";
+    });
+    // Compute hotels after UI updates to reduce perceived freeze.
+    Future(() {
+      final bounds = _boundsFromPolys(polys);
+      final boundaryHotels = <Hotel>[];
+      for (final h in _filteredHotels) {
+        if (h.lat < bounds.southwest.latitude || h.lat > bounds.northeast.latitude) continue;
+        if (h.lng < bounds.southwest.longitude || h.lng > bounds.northeast.longitude) continue;
+        final p = LatLng(h.lat, h.lng);
+        for (final poly in polys) {
+          if (_pointInPoly(p, poly)) {
+            boundaryHotels.add(h);
+            break;
+          }
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _boundaryHotels = boundaryHotels;
+        _boundaryStatus = "";
+      });
     });
     final controller = await _controller.future;
     controller.animateCamera(CameraUpdate.newLatLngBounds(_boundsFromPolys(polys), 40));
@@ -878,18 +890,20 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                       const Divider(height: 1),
                       Expanded(
-                        child: ListView.builder(
-                          controller: controller,
-                          itemCount: _boundaryHotels.length,
-                          itemBuilder: (context, index) {
-                            final hotel = _boundaryHotels[index];
-                            return ListTile(
-                              title: Text(hotel.name),
-                              subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis),
-                              onTap: () => _goToHotel(hotel),
-                            );
-                          },
-                        ),
+                        child: _boundaryHotels.isEmpty
+                            ? Center(child: Text(_boundaryStatus.isNotEmpty ? _boundaryStatus : "該当ホテルなし"))
+                            : ListView.builder(
+                                controller: controller,
+                                itemCount: _boundaryHotels.length,
+                                itemBuilder: (context, index) {
+                                  final hotel = _boundaryHotels[index];
+                                  return ListTile(
+                                    title: Text(hotel.name),
+                                    subtitle: Text(hotel.address, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    onTap: () => _goToHotel(hotel),
+                                  );
+                                },
+                              ),
                       ),
                     ],
                   ),
